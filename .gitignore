@@ -1,0 +1,35 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Editor and IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
+# Build and dependency output
+build/
+dist/
+coverage/
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Test output
+playwright-report/
+test-results/
+
+# Supabase local development
+supabase/.temp/
