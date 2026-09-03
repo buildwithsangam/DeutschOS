@@ -16,7 +16,9 @@ function requiredEnvironmentVariable(name: string): string {
 export function getSupabasePublicConfig(): SupabasePublicConfig {
   return {
     url: requiredEnvironmentVariable("NEXT_PUBLIC_SUPABASE_URL"),
-    publishableKey: requiredEnvironmentVariable("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+    publishableKey:
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+      requiredEnvironmentVariable("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
   };
 }
 

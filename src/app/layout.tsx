@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { AuthNav } from "@/app/auth/auth-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -8,10 +9,15 @@ export const metadata: Metadata = {
   description: "A focused German learning system for the A1 curriculum.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <div className="global-auth-bar">
+          <AuthNav />
+        </div>
+        {children}
+      </body>
     </html>
   );
 }
