@@ -16,8 +16,7 @@
     "test:e2e": "playwright test --pass-with-no-tests",
     "curriculum:validate:days-1-14": "node scripts/import-a1-days-1-14.mjs --dry-run",
     "curriculum:import:days-1-14": "node scripts/import-a1-days-1-14.mjs --apply",
-    "curriculum:validate:a1": "node scripts/import-a1-curriculum.mjs --dry-run",
-    "curriculum:import:a1": "node scripts/import-a1-curriculum.mjs --apply"
+    "curriculum:validate:a1": "node scripts/import-a1-curriculum.mjs --dry-run"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
