@@ -21,7 +21,8 @@ export type A1SectionKind =
   | "practical_task"
   | "communication_repair"
   | "realistic_interaction"
-  | "mastery_check";
+  | "mastery_check"
+  | "other";
 
 export type A1LessonSection = {
   kind: A1SectionKind;
@@ -53,7 +54,6 @@ export type A1Curriculum = {
   days: A1Day[];
 };
 
-/** Presentation policy: optional or empty source sections never render as blank lesson cards. */
 export function lessonSectionsForDisplay(day: A1Day) {
   return day.sections.filter((section) => !section.isVocabularyProxy && section.markdown.trim().length > 0);
 }
