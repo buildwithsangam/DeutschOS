@@ -34,7 +34,7 @@ function toLegacy(source: string): A1Curriculum {
       sections: day.sections
         .filter((section) => section.canonicalKey !== "objective" && section.canonicalKey !== "interestExposure")
         .map((section) => ({
-          kind: legacyKindByCanonicalKey[section.canonicalKey ?? ""] ?? "main_lesson",
+          kind: legacyKindByCanonicalKey[section.canonicalKey ?? ""] ?? "other",
           title: section.heading,
           markdown: section.rawMarkdown,
           isVocabularyProxy: section.canonicalKey === "lessonContent",
