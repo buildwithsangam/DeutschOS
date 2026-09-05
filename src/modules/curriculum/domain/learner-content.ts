@@ -53,7 +53,8 @@ export function notebookGuidance(day: A1Day) {
   const core = sectionForDay(day, "daily_german_core");
   const notes = [
     grammar ? firstUsefulLine(grammar.markdown) : undefined,
-    day.sentenceBuilder.answer,
+    day.sentenceBuilders?.[0]?.answer ??
+      day.sentenceBuilder?.answer,
     core ? firstUsefulLine(core.markdown) : undefined,
   ].filter((note): note is string => Boolean(note));
   return [...new Set(notes)].slice(0, 3);

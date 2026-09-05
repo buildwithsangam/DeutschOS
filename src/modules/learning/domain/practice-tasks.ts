@@ -18,7 +18,10 @@ export function practiceTasksForDay(day: A1Day): PracticeTask[] {
       id: `day-${day.dayNumber}-sentence-builder`,
       kind: "sentence_builder",
       title: "Sentence Builder",
-      instruction: day.sentenceBuilder.prompt,
+      instruction:
+        day.sentenceBuilders?.[0]?.prompt ??
+        day.sentenceBuilder?.prompt ??
+        "",
       completionLabel: "Sentence Builder completed",
     },
   ];

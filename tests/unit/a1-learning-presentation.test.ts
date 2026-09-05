@@ -23,7 +23,17 @@ describe("A1 learning presentation", () => {
     ]);
     expect(dailyCoreItems(dayOne).map((item) => item.german)).toEqual(["Guten Tag", "Ja / Nein", "Danke"]);
     expect(lessonFlow.map((flow) => flow.label)).toEqual([
-      "Learn", "Pronunciation", "Listen", "Practice", "Speak", "Real-life mission", "Communication repair", "Review", "Mastery check",
+      "Learn",
+      "Pronunciation",
+      "Listen",
+      "Practice",
+      "Speak",
+      "Real-life mission",
+      "Communication repair",
+      "Review",
+      "Interest-driven German",
+      "Additional & unknown",
+      "Mastery check",
     ]);
     expect(sentenceBuilderStages(dayOne)).toContain("Words");
     expect(notebookGuidance(dayOne)).toEqual(expect.arrayContaining([dayOne.sentenceBuilder.answer]));
