@@ -41,6 +41,7 @@ const sectionLabels: Record<A1LessonSection["kind"], string> = {
   communication_repair: "Communication repair",
   realistic_interaction: "Realistic interaction",
   mastery_check: "Mastery check",
+  other: "Other",
 };
 
 function MarkdownContent({ markdown }: { markdown: string }) {
