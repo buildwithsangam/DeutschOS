@@ -42,22 +42,22 @@ function sourceRef({ documentPath, weekNumber, dayNumber, sectionNumber, startLi
 function canonicalSectionKey(heading) {
   const value = heading.trim().replace(/\s+/g, " ");
   const patterns = [
-    { test: /^(day\s+)?(main\s+)?objective$/i, key: "objective" },
-    { test: /^main\s+(curriculum(\s+lesson\s+content)?|language\s+being\s+consolidated)$/i, key: "lessonContent" },
-    { test: /^daily\s+german\s+core(\s+(items?|connection))?$/i, key: "dailyCore" },
-    { test: /^pronunciation(\s+practice)?$/i, key: "pronunciation" },
-    { test: /^minimum\s+(theory|explanation)$/i, key: "minimumTheory" },
-    { test: /^listening(\s+practice)?$/i, key: "listening" },
-    { test: /^speaking(\s+practice)?$/i, key: "speaking" },
-    { test: /^reading(\s+practice)?$/i, key: "reading" },
-    { test: /^writing(\s+practice)?$/i, key: "writing" },
+    { test: /^(day\s+)?(main\s+)?objective\b/i, key: "objective" },
+    { test: /^main\s+(curriculum(\s+lesson\s+content)?|language\s+being\s+consolidated)\b/i, key: "lessonContent" },
+    { test: /^daily\s+german\s+core\b/i, key: "dailyCore" },
+    { test: /^pronunciation\b/i, key: "pronunciation" },
+    { test: /^minimum\s+(theory|explanation)\b/i, key: "minimumTheory" },
+    { test: /^listening\b/i, key: "listening" },
+    { test: /^speaking\b/i, key: "speaking" },
+    { test: /^reading\b/i, key: "reading" },
+    { test: /^writing\b/i, key: "writing" },
     { test: /\bsentence[- ]building\b/i, key: "sentenceBuilding" },
-    { test: /^retrieval(\s*\/\s*(review|recycling)|\s+(review|recycling))?$/i, key: "retrieval" },
-    { test: /^practical\s+germany\s+task$/i, key: "practicalTask" },
-    { test: /^communication[- ]repair$/i, key: "repair" },
-    { test: /^(native[- ]response|realistic\s+(native\s+response|interaction)|realistic\s+native)/i, key: "nativeInteraction" },
-    { test: /^(optional\s+)?interest[- ]driven\s+german\s+exposure$/i, key: "interestExposure" },
-    { test: /^mastery\s+check$/i, key: "mastery" },
+    { test: /^retrieval\b/i, key: "retrieval" },
+    { test: /^practical\s+germany\s+task\b/i, key: "practicalTask" },
+    { test: /^communication[- ]repair\b/i, key: "repair" },
+    { test: /^(native[- ]response|realistic\s+(native\s+response|interaction)|realistic\s+native)\b/i, key: "nativeInteraction" },
+    { test: /^(optional\s+)?interest[- ]driven\s+german\s+exposure\b/i, key: "interestExposure" },
+    { test: /^mastery\s+check\b/i, key: "mastery" },
   ];
   return patterns.find(({ test }) => test.test(value))?.key ?? null;
 }
