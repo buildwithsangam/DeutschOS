@@ -29,7 +29,7 @@ function cleanMarkdown(text: string) {
     .replace(/\*+/g, "")
     .replace(/`/g, "")
     .replace(/\[[^\]]+\]/g, "")
-    .replace(/\\\([^)]*\\\)/g, "")
+    .replace(/\\\([^)]*\)/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -42,14 +42,25 @@ function sectionToLegacy(section: ParsedSection, kind: A1SectionKind, isVocabula
   return { kind, title: isVocabularyProxy ? "Vocabulary & patterns in today’s lesson" : section.heading, markdown: section.rawMarkdown, isVocabularyProxy };
 }
 
+function cleanSentenceBuilderAnswer(raw: string) {
+  return raw
+    .replace(/^[-–—]\s*/, "")
+    .replace(/^[^:\n]+:\s*/, (prefix) => /^(task|input blocks|execution|substitution drill|expansion|traveler|staff|customer|clerk|speaker)\s*:/i.test(prefix) ? "" : prefix)
+    .replace(/^[“”"']+/, "")
+    .replace(/[“”"']+$/, "")
+    .trim();
+}
+
 function sentenceBuilder(section: ParsedSection, dayNumber: number) {
   const cleanedLines = section.rawMarkdown.split("\n").map(cleanMarkdown).filter(Boolean);
   const answerLine = cleanedLines.find((line) => line.includes("→") && /[A-Za-zÄÖÜäöüß]/.test(line.split("→")[1] ?? ""));
   const exampleLine = cleanedLines.find((line) => {
-    const candidate = line.replace(/^[-–]\s*/, "").trim();
-    return /[.!?]["”']?$/.test(candidate) && !/^(Task|Input Blocks|Execution|Substitution Drill|Expansion):/i.test(candidate);
+    const candidate = line.replace(/^[-–—]\s*/, "").trim();
+    const candidateWithoutSpeaker = candidate.replace(/^[^:\n]+:\s*/, "").trim();
+    return /[.!?]["”']?$/.test(candidateWithoutSpeaker) && !/^(Task|Input Blocks|Execution|Substitution Drill|Expansion):/i.test(candidateWithoutSpeaker);
   });
-  const answer = (answerLine?.split("→")[1] ?? exampleLine)?.trim().replace(/\s+$/, "");
+  const rawAnswer = (answerLine?.split("→")[1] ?? exampleLine)?.trim() ?? "";
+  const answer = cleanSentenceBuilderAnswer(rawAnswer);
   if (!answer || answer.length < 2) throw new Error(`Day ${dayNumber} has no canonical sentence-builder answer`);
   const tokens = answer.match(/[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*|[.,?!:;]/gu) ?? [];
   if (tokens.length < 2) throw new Error(`Day ${dayNumber} sentence-builder answer has too few tokens`);
