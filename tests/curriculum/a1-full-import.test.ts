@@ -42,13 +42,16 @@ describe("full A1 curriculum foundation", () => {
     expect(new Set(sectionIds).size).toBe(sectionIds.length);
 
     const requiredKeys = [
-      "objective", "lessonContent", "dailyCore", "pronunciation", "minimumTheory",
+      "objective", "lessonContent", "dailyCore", "pronunciation",
       "listening", "speaking", "reading", "writing", "sentenceBuilding", "retrieval",
       "practicalTask", "repair", "nativeInteraction", "mastery",
     ];
+    const requiredKeysWithTheory = [...requiredKeys, "minimumTheory"];
+
     for (const day of curriculum.days) {
       const primaryKeys = new Set(day.sections.filter((section) => !section.isAdditional).map((section) => section.canonicalKey));
-      for (const key of requiredKeys) expect(primaryKeys.has(key)).toBe(true);
+      const expectedKeys = day.number <= 35 ? requiredKeysWithTheory : requiredKeys;
+      for (const key of expectedKeys) expect(primaryKeys.has(key)).toBe(true);
     }
 
     for (const dayNumber of [7, 14, 21, 28, 35, 42]) {

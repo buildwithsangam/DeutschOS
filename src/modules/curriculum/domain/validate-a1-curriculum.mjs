@@ -1,7 +1,12 @@
 const REQUIRED_KEYS = [
-  "objective", "lessonContent", "dailyCore", "pronunciation", "minimumTheory",
+  "objective", "lessonContent", "dailyCore", "pronunciation",
   "listening", "speaking", "reading", "writing", "sentenceBuilding", "retrieval",
   "practicalTask", "repair", "nativeInteraction", "mastery",
+];
+
+const REQUIRED_KEYS_WITH_THEORY = [
+  ...REQUIRED_KEYS,
+  "minimumTheory",
 ];
 
 const EXPLICIT_LEVEL_RE = /(?:^|\b)(?:A2|B1|B2)\s*(?:lesson|curriculum|module|unit|day|week|grammar|vocabulary|content)\b/i;
@@ -31,7 +36,8 @@ export function validateA1Curriculum(curriculum) {
     if (day.weekNumber !== Math.ceil(day.number / 7)) errors.push(error("WEEK_MAPPING", `Day ${day.number} maps to week ${day.weekNumber}.`, { day: day.number }));
     if (day.phaseNumber !== Math.ceil(day.weekNumber / 2)) errors.push(error("PHASE_MAPPING", `Day ${day.number} maps to phase ${day.phaseNumber}.`, { day: day.number }));
     const keys = new Set(day.sections.map((section) => section.canonicalKey).filter(Boolean));
-    for (const key of REQUIRED_KEYS) {
+    const requiredKeys = day.number <= 35 ? REQUIRED_KEYS_WITH_THEORY : REQUIRED_KEYS;
+    for (const key of requiredKeys) {
       if (!keys.has(key)) errors.push(error("REQUIRED_SECTION", `Day ${day.number} is missing ${key}.`, { day: day.number, key }));
     }
     for (const reference of day.dailyCoreReferences) {

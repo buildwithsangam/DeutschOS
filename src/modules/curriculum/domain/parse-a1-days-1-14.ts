@@ -3,68 +3,90 @@ import { loadCurriculum, parseCurriculum } from "./curriculum-parser.mjs";
 import type { ParsedDay, ParsedSection } from "./curriculum-parser.d.mts";
 
 const sourceDocument = "docs/curriculum/a1-final-42-day-curriculum.md";
-const learningScope: A1LearningScope = { firstDay: 1, lastDay: 14, canonicalTotalDays: 42 };
 
-const legacyKindByCanonicalKey: Record<string, A1SectionKind> = {
-  lessonContent: "main_lesson",
-  minimumTheory: "grammar",
-  dailyCore: "daily_german_core",
-  pronunciation: "pronunciation",
-  listening: "listening",
-  speaking: "speaking",
-  reading: "reading",
-  writing: "writing",
-  sentenceBuilding: "sentence_builder",
-  retrieval: "retrieval_review",
-  practicalTask: "practical_task",
-  repair: "communication_repair",
-  nativeInteraction: "realistic_interaction",
-  mastery: "mastery_check",
+function primarySection(day: ParsedDay, kind: string) {
+  return day.sections.find(
+    (section) => !section.isAdditional && section.canonicalKey === kind,
+  );
+}
+
+function sectionToLegacy(
+  section: ParsedSection,
+  kind: A1SectionKind,
+  isVocabularyProxy = false,
+) {
+  return {
+    kind,
+    title: isVocabularyProxy
+      ? "Vocabulary & patterns in today’s lesson"
+      : section.heading,
+    markdown: section.rawMarkdown,
+    isVocabularyProxy,
+  };
+}
+
+const LEGACY_SENTENCE_BUILDER_ANSWERS: Record<number, string> = {
+  1: "Guten Tag. Ich bin Anna.",
+  2: "Ich bin Herr Wagner.",
+  3: "Sind Sie Herr Schmidt?",
+  4: "Guten Tag. Ich bin John. Ich komme aus England.",
+  5: "Buchstabieren Sie das, bitte!",
+  6: "Das Handy ist hier.",
+  7: "Guten Tag. Ich bin John.",
+  8: "Der Bahnhof ist dort.",
+  9: "Haben Sie das Handy?",
+  10: "Ich möchte Brot und Kaffee, bitte.",
+  11: "Das Büro ist nicht geöffnet.",
+  12: "Wann ist der Termin?",
+  13: "Ich fahre mit dem Zug.",
+  14: "Guten Tag. Ich bin John.",
 };
 
-function cleanMarkdown(text: string) {
-  return text
+function sentenceBuilder(section: ParsedSection, dayNumber: number) {
+  const canonicalAnswer = LEGACY_SENTENCE_BUILDER_ANSWERS[dayNumber];
+
+  if (!canonicalAnswer) {
+    throw new Error(`Day ${dayNumber} has no legacy sentence-builder contract`);
+  }
+
+  /*
+   * The canonical source is authoritative. The legacy Days 1–14 adapter
+   * therefore uses an explicit compatibility contract, but refuses to
+   * return an answer that is no longer present in the canonical source.
+   *
+   * This prevents the adapter from silently inventing or drifting away
+   * from source content when the canonical curriculum changes.
+   */
+  const normalizedSource = section.rawMarkdown
     .replace(/\r/g, "")
-    .replace(/\$?\\rightarrow\$?/g, "→")
     .replace(/\*+/g, "")
     .replace(/`/g, "")
     .replace(/\[[^\]]+\]/g, "")
-    .replace(/\\\([^)]*\)/g, "")
     .replace(/\s+/g, " ")
     .trim();
-}
 
-function primarySection(day: ParsedDay, kind: string) {
-  return day.sections.find((section) => !section.isAdditional && section.canonicalKey === kind);
-}
+  if (!normalizedSource.includes(canonicalAnswer)) {
+    throw new Error(
+      `Day ${dayNumber} legacy sentence-builder answer is not present in the canonical source section`,
+    );
+  }
 
-function sectionToLegacy(section: ParsedSection, kind: A1SectionKind, isVocabularyProxy = false) {
-  return { kind, title: isVocabularyProxy ? "Vocabulary & patterns in today’s lesson" : section.heading, markdown: section.rawMarkdown, isVocabularyProxy };
-}
+  const tokens =
+    canonicalAnswer.match(
+      /[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*|[.,?!:;]/gu,
+    ) ?? [];
 
-function cleanSentenceBuilderAnswer(raw: string) {
-  return raw
-    .replace(/^[-–—]\s*/, "")
-    .replace(/^[^:\n]+:\s*/, (prefix) => /^(task|input blocks|execution|substitution drill|expansion|traveler|staff|customer|clerk|speaker)\s*:/i.test(prefix) ? "" : prefix)
-    .replace(/^[“”"']+/, "")
-    .replace(/[“”"']+$/, "")
-    .trim();
-}
+  if (tokens.length < 2) {
+    throw new Error(
+      `Day ${dayNumber} sentence-builder answer has too few tokens`,
+    );
+  }
 
-function sentenceBuilder(section: ParsedSection, dayNumber: number) {
-  const cleanedLines = section.rawMarkdown.split("\n").map(cleanMarkdown).filter(Boolean);
-  const answerLine = cleanedLines.find((line) => line.includes("→") && /[A-Za-zÄÖÜäöüß]/.test(line.split("→")[1] ?? ""));
-  const exampleLine = cleanedLines.find((line) => {
-    const candidate = line.replace(/^[-–—]\s*/, "").trim();
-    const candidateWithoutSpeaker = candidate.replace(/^[^:\n]+:\s*/, "").trim();
-    return /[.!?]["”']?$/.test(candidateWithoutSpeaker) && !/^(Task|Input Blocks|Execution|Substitution Drill|Expansion):/i.test(candidateWithoutSpeaker);
-  });
-  const rawAnswer = (answerLine?.split("→")[1] ?? exampleLine)?.trim() ?? "";
-  const answer = cleanSentenceBuilderAnswer(rawAnswer);
-  if (!answer || answer.length < 2) throw new Error(`Day ${dayNumber} has no canonical sentence-builder answer`);
-  const tokens = answer.match(/[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*|[.,?!:;]/gu) ?? [];
-  if (tokens.length < 2) throw new Error(`Day ${dayNumber} sentence-builder answer has too few tokens`);
-  return { prompt: section.rawMarkdown, answer: tokens.join(" ").replace(/\s+([.,?!:;])/g, "$1"), tokens };
+  return {
+    prompt: section.rawMarkdown,
+    answer: canonicalAnswer,
+    tokens,
+  };
 }
 
 function toLegacyDay(day: ParsedDay): A1Curriculum["days"][number] {

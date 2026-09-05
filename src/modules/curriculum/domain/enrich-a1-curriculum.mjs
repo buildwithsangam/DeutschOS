@@ -2,10 +2,6 @@ function slug(value) {
   return value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/ß/g, "ss").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 }
 
-function sourceEntity(id, source, rawMarkdown) {
-  return { id, source, rawMarkdown };
-}
-
 function extractVocabulary(day) {
   const result = [];
   for (const match of day.rawMarkdown.matchAll(/\*\*([^*\n]+)\*\*/g)) {
