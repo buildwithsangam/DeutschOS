@@ -58,6 +58,18 @@ describe("full A1 curriculum foundation", () => {
       const day = curriculum.days[dayNumber - 1];
       expect(day.sections.some((section) => section.isAdditional)).toBe(true);
     }
+
+    for (const dayNumber of [36, 37, 38, 39, 40, 41, 42]) {
+      const day = curriculum.days[dayNumber - 1];
+      expect(
+        day.sections.some(
+          (section) =>
+            !section.isAdditional &&
+            section.canonicalKey === "interestExposure" &&
+            /^Optional Interest-Driven German(?: Exposure)?$/i.test(section.heading),
+        ),
+      ).toBe(true);
+    }
   });
 
   it("never writes to the database or source document", () => {

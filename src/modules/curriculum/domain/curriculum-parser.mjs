@@ -56,7 +56,7 @@ function canonicalSectionKey(heading) {
     { test: /^practical\s+germany\s+task\b/i, key: "practicalTask" },
     { test: /^communication[- ]repair\b/i, key: "repair" },
     { test: /^(native[- ]response|realistic\s+(native\s+response|interaction)|realistic\s+native)\b/i, key: "nativeInteraction" },
-    { test: /^(optional\s+)?interest[- ]driven\s+german\s+exposure\b/i, key: "interestExposure" },
+    { test: /^(optional\s+)?interest[- ]driven\s+german(?:\s+exposure)?\b/i, key: "interestExposure" },
     { test: /^mastery\s+check\b/i, key: "mastery" },
   ];
   return patterns.find(({ test }) => test.test(value))?.key ?? null;
