@@ -21,9 +21,7 @@ function isDuplicatePath(filePath) {
 
 function assertCanonicalPath(filePath) {
   const normalized = filePath.replaceAll("\\", "/");
-  if (isDuplicatePath(normalized)) {
-    throw new Error(`Duplicate curriculum source is not authoritative: ${filePath}`);
-  }
+  if (isDuplicatePath(normalized)) throw new Error(`Duplicate curriculum source is not authoritative: ${filePath}`);
   if (normalized !== CANONICAL_A1_PATH && !normalized.endsWith(`/${CANONICAL_A1_PATH}`)) {
     throw new Error(`Only the canonical A1 curriculum may be loaded: ${CANONICAL_A1_PATH}`);
   }
@@ -42,47 +40,64 @@ function sourceRef({ documentPath, weekNumber, dayNumber, sectionNumber, startLi
 }
 
 function canonicalSectionKey(heading) {
-  const value = heading.toLowerCase().trim();
-  const mappings = [
-    [/^day objective\b/, "objective"],
-    [/^main (curriculum|language) lesson content\b/, "lessonContent"],
-    [/^daily german core items?\b/, "dailyCore"],
-    [/^pronunciation practice\b/, "pronunciation"],
-    [/^minimum (theory|explanation)\b/, "minimumTheory"],
-    [/^listening\b/, "listening"],
-    [/^speaking\b/, "speaking"],
-    [/^reading\b/, "reading"],
-    [/^writing\b/, "writing"],
-    [/^sentence[- ]building\b/, "sentenceBuilding"],
-    [/^retrieval\b/, "retrieval"],
-    [/^practical germany task\b/, "practicalTask"],
-    [/^communication[- ]repair\b/, "repair"],
-    [/^(native[- ]response|realistic interaction|realistic native)\b/, "nativeInteraction"],
-    [/^(interest|exposure)\b/, "interestExposure"],
-    [/^mastery check\b/, "mastery"],
+  const value = heading.trim().replace(/\s+/g, " ");
+  const patterns = [
+    { test: /^(day\s+)?objective$/i, key: "objective" },
+    { test: /^main curriculum(\s+lesson\s+content)?$/i, key: "lessonContent" },
+    { test: /^daily german core items?$/i, key: "dailyCore" },
+    { test: /^pronunciation(\s+practice)?$/i, key: "pronunciation" },
+    { test: /^minimum\s+(theory|explanation)$/i, key: "minimumTheory" },
+    { test: /^listening(\s+practice)?$/i, key: "listening" },
+    { test: /^speaking(\s+practice)?$/i, key: "speaking" },
+    { test: /^reading(\s+practice)?$/i, key: "reading" },
+    { test: /^writing(\s+practice)?$/i, key: "writing" },
+    { test: /\bsentence[- ]building\b/i, key: "sentenceBuilding" },
+    { test: /^retrieval(\s*\/\s*review|\s+review)?$/i, key: "retrieval" },
+    { test: /^practical germany task$/i, key: "practicalTask" },
+    { test: /^communication[- ]repair$/i, key: "repair" },
+    { test: /^(native[- ]response|realistic\s+(native\s+response|interaction)|realistic native)$/i, key: "nativeInteraction" },
+    { test: /^(optional\s+)?interest[- ]driven german exposure$/i, key: "interestExposure" },
+    { test: /^mastery check$/i, key: "mastery" },
   ];
-  return mappings.find(([pattern]) => pattern.test(value))?.[1] ?? null;
+  return patterns.find(({ test }) => test.test(value))?.key ?? null;
 }
 
 function parseSections(lines, dayStartIndex, dayEndIndex, documentPath, dayNumber, weekNumber) {
-  const sectionHeaders = [];
-  for (let index = dayStartIndex + 1; index < dayEndIndex; index += 1) {
-    const match = lines[index].match(SECTION_HEADING_RE);
-    if (match) {
-      sectionHeaders.push({ number: Number(match[1]), heading: match[2].trim(), lineIndex: index });
-    }
+  const headers = [];
+  for (let lineIndex = dayStartIndex + 1; lineIndex < dayEndIndex; lineIndex += 1) {
+    const match = lines[lineIndex].match(SECTION_HEADING_RE);
+    if (match) headers.push({ number: Number(match[1]), heading: match[2].trim(), lineIndex });
   }
 
-  return sectionHeaders.map((header, index) => {
-    const next = sectionHeaders[index + 1];
+  const sections = [];
+  const seenNumbers = new Set();
+  let additionalMode = false;
+  const extraOrdinalByNumber = new Map();
+
+  for (let index = 0; index < headers.length; index += 1) {
+    const header = headers[index];
+    if (!additionalMode && seenNumbers.has(header.number)) additionalMode = true;
+    const isAdditional = additionalMode;
+    if (!isAdditional) seenNumbers.add(header.number);
+
+    const next = headers[index + 1];
     const endExclusive = next?.lineIndex ?? dayEndIndex;
     const rawMarkdown = lines.slice(header.lineIndex + 1, endExclusive).join("\n").trim();
-    return {
-      id: `a1.d${String(dayNumber).padStart(2, "0")}.s${String(header.number).padStart(2, "0")}`,
+
+    let id = `a1.d${String(dayNumber).padStart(2, "0")}.s${String(header.number).padStart(2, "0")}`;
+    if (isAdditional) {
+      const ordinal = (extraOrdinalByNumber.get(header.number) ?? 0) + 1;
+      extraOrdinalByNumber.set(header.number, ordinal);
+      id = `${id}.extra${ordinal}`;
+    }
+
+    sections.push({
+      id,
       number: header.number,
       canonicalKey: canonicalSectionKey(header.heading),
       heading: header.heading,
       rawMarkdown,
+      isAdditional,
       source: sourceRef({
         documentPath,
         weekNumber,
@@ -91,8 +106,10 @@ function parseSections(lines, dayStartIndex, dayEndIndex, documentPath, dayNumbe
         startLine: header.lineIndex + 1,
         endLine: Math.max(header.lineIndex + 1, endExclusive),
       }),
-    };
-  });
+    });
+  }
+
+  return sections;
 }
 
 function findQaSections(sourceText) {
@@ -107,11 +124,8 @@ function findQaSections(sourceText) {
     const startOffset = matches[i].index;
     const endOffset = matches[i + 1]?.index ?? block.length;
     const content = block.slice(startOffset, endOffset).trim();
-    if (/^Week\s+[1-6]$/i.test(title)) {
-      result.weeks.set(Number(title.match(/\d+/)?.[0]), content);
-    } else if (/^Global \/ all weeks$/i.test(title)) {
-      result.global = content;
-    }
+    if (/^Week\s+[1-6]$/i.test(title)) result.weeks.set(Number(title.match(/\d+/)?.[0]), content);
+    else if (/^Global \/ all weeks$/i.test(title)) result.global = content;
   }
   return result;
 }
@@ -145,8 +159,8 @@ export function parseCurriculum(sourceText, options = {}) {
     const phaseNumber = Math.ceil(weekNumber / 2);
     const sections = parseSections(lines, heading.lineIndex, endExclusive, documentPath, heading.dayNumber, weekNumber);
     const dayRaw = lines.slice(heading.lineIndex, endExclusive).join("\n").trim();
-    const objective = sections.find((section) => section.canonicalKey === "objective");
-    const core = sections.find((section) => section.canonicalKey === "dailyCore");
+    const objective = sections.find((section) => !section.isAdditional && section.canonicalKey === "objective");
+    const core = sections.find((section) => !section.isAdditional && section.canonicalKey === "dailyCore");
     const qaWeek = qa.weeks.get(weekNumber) ?? "";
     const qaOverride = [qaWeek, qa.global].filter(Boolean).join("\n\n");
 
@@ -158,13 +172,7 @@ export function parseCurriculum(sourceText, options = {}) {
       phaseNumber,
       sections,
       qaOverride,
-      source: sourceRef({
-        documentPath,
-        weekNumber,
-        dayNumber: heading.dayNumber,
-        startLine: heading.lineIndex + 1,
-        endLine: endExclusive,
-      }),
+      source: sourceRef({ documentPath, weekNumber, dayNumber: heading.dayNumber, startLine: heading.lineIndex + 1, endLine: endExclusive }),
       objectiveMarkdown: objective?.rawMarkdown ?? "",
       dailyCoreReferences: parseDailyCoreReferences(core?.rawMarkdown ?? ""),
       rawMarkdown: dayRaw,
@@ -182,12 +190,7 @@ export function parseCurriculum(sourceText, options = {}) {
       title: `Week ${number}`,
       phaseNumber: Math.ceil(number / 2),
       days: weekDays,
-      source: sourceRef({
-        documentPath,
-        weekNumber: number,
-        startLine: firstDay?.source.startLine,
-        endLine: lastDay?.source.endLine,
-      }),
+      source: sourceRef({ documentPath, weekNumber: number, startLine: firstDay?.source.startLine, endLine: lastDay?.source.endLine }),
     };
   });
 
@@ -199,11 +202,7 @@ export function parseCurriculum(sourceText, options = {}) {
       number,
       title: `Phase ${number}`,
       weekNumbers: phaseWeeks.map((week) => week.number),
-      source: sourceRef({
-        documentPath,
-        startLine: phaseWeeks[0]?.source.startLine,
-        endLine: phaseWeeks.at(-1)?.source.endLine,
-      }),
+      source: sourceRef({ documentPath, startLine: phaseWeeks[0]?.source.startLine, endLine: phaseWeeks.at(-1)?.source.endLine }),
     };
   });
 
@@ -228,14 +227,9 @@ export function loadCurriculum(filePath = CANONICAL_A1_PATH) {
 }
 
 export function getSection(day, canonicalKey) {
-  return day.sections.find((section) => section.canonicalKey === canonicalKey);
+  return day.sections.find((section) => !section.isAdditional && section.canonicalKey === canonicalKey);
 }
 
 export function isCanonicalSourcePath(filePath) {
-  try {
-    assertCanonicalPath(filePath);
-    return true;
-  } catch {
-    return false;
-  }
+  try { assertCanonicalPath(filePath); return true; } catch { return false; }
 }
