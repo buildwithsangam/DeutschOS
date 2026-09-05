@@ -36,6 +36,7 @@ const labels: Record<A1SectionKind, string> = {
   communication_repair: "Communication repair",
   realistic_interaction: "Realistic interaction",
   mastery_check: "Mastery check",
+  other: "Other",
 };
 
 function promptText(markdown: string) {
