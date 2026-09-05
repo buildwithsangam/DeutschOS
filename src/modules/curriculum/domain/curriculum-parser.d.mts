@@ -32,6 +32,7 @@ export type ParsedSection = {
   canonicalKey: DaySectionKey | null;
   heading: string;
   rawMarkdown: string;
+  isAdditional: boolean;
   source: SourceRef;
 };
 
@@ -78,10 +79,7 @@ export type ParsedCurriculum = {
   sourceText: string;
 };
 
-export function parseCurriculum(
-  sourceText: string,
-  options?: { documentPath?: string },
-): ParsedCurriculum;
+export function parseCurriculum(sourceText: string, options?: { documentPath?: string }): ParsedCurriculum;
 export function loadCurriculum(filePath?: string): ParsedCurriculum;
 export function getSection(day: ParsedDay, canonicalKey: DaySectionKey): ParsedSection | undefined;
 export function isCanonicalSourcePath(filePath: string): boolean;
