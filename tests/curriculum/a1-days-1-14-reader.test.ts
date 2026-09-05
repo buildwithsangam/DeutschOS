@@ -8,6 +8,23 @@ import { parseA1DaysOneToFourteen } from "@/modules/curriculum/domain/parse-a1-d
 const source = readFileSync(resolve(process.cwd(), "docs/curriculum/a1-final-42-day-curriculum.md"), "utf8");
 const curriculum = parseA1DaysOneToFourteen(source);
 
+const expectedSentenceBuilderAnswers = [
+  "Guten Tag. Ich bin Anna.",
+  "Ich bin Herr Wagner.",
+  "Sind Sie Herr Schmidt?",
+  "Guten Tag. Ich bin John. Ich komme aus England.",
+  "Buchstabieren Sie das, bitte!",
+  "Das Handy ist hier.",
+  "Guten Tag. Ich bin John.",
+  "Der Bahnhof ist dort.",
+  "Haben Sie das Handy?",
+  "Ich möchte Brot und Kaffee, bitte.",
+  "Das Büro ist nicht geöffnet.",
+  "Wann ist der Termin?",
+  "Ich fahre mit dem Zug.",
+  "Guten Tag. Ich bin John.",
+];
+
 describe("A1 Days 1–14 learner curriculum reader", () => {
   it("exposes only ordered Days 1–14 across Weeks 1–2", () => {
     expect(curriculum.sourceDocument).toBe("docs/curriculum/a1-final-42-day-curriculum.md");
@@ -17,6 +34,7 @@ describe("A1 Days 1–14 learner curriculum reader", () => {
   });
 
   it("keeps structured source content, canonical builder answers, and final QA precedence", () => {
+    expect(curriculum.days.map((day) => day.sentenceBuilder.answer)).toEqual(expectedSentenceBuilderAnswers);
     for (const day of curriculum.days) {
       expect(day.sections).toHaveLength(15);
       expect(day.sentenceBuilder.answer.length).toBeGreaterThan(1);
