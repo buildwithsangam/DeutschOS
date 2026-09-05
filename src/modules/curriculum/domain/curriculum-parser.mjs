@@ -42,9 +42,9 @@ function sourceRef({ documentPath, weekNumber, dayNumber, sectionNumber, startLi
 function canonicalSectionKey(heading) {
   const value = heading.trim().replace(/\s+/g, " ");
   const patterns = [
-    { test: /^(day\s+)?objective$/i, key: "objective" },
-    { test: /^main curriculum(\s+lesson\s+content)?$/i, key: "lessonContent" },
-    { test: /^daily german core items?$/i, key: "dailyCore" },
+    { test: /^(day\s+)?(main\s+)?objective$/i, key: "objective" },
+    { test: /^main\s+(curriculum(\s+lesson\s+content)?|language\s+being\s+consolidated)$/i, key: "lessonContent" },
+    { test: /^daily\s+german\s+core(\s+(items?|connection))?$/i, key: "dailyCore" },
     { test: /^pronunciation(\s+practice)?$/i, key: "pronunciation" },
     { test: /^minimum\s+(theory|explanation)$/i, key: "minimumTheory" },
     { test: /^listening(\s+practice)?$/i, key: "listening" },
@@ -52,12 +52,12 @@ function canonicalSectionKey(heading) {
     { test: /^reading(\s+practice)?$/i, key: "reading" },
     { test: /^writing(\s+practice)?$/i, key: "writing" },
     { test: /\bsentence[- ]building\b/i, key: "sentenceBuilding" },
-    { test: /^retrieval(\s*\/\s*review|\s+review)?$/i, key: "retrieval" },
-    { test: /^practical germany task$/i, key: "practicalTask" },
+    { test: /^retrieval(\s*\/\s*(review|recycling)|\s+(review|recycling))?$/i, key: "retrieval" },
+    { test: /^practical\s+germany\s+task$/i, key: "practicalTask" },
     { test: /^communication[- ]repair$/i, key: "repair" },
-    { test: /^(native[- ]response|realistic\s+(native\s+response|interaction)|realistic native)$/i, key: "nativeInteraction" },
-    { test: /^(optional\s+)?interest[- ]driven german exposure$/i, key: "interestExposure" },
-    { test: /^mastery check$/i, key: "mastery" },
+    { test: /^(native[- ]response|realistic\s+(native\s+response|interaction)|realistic\s+native)/i, key: "nativeInteraction" },
+    { test: /^(optional\s+)?interest[- ]driven\s+german\s+exposure$/i, key: "interestExposure" },
+    { test: /^mastery\s+check$/i, key: "mastery" },
   ];
   return patterns.find(({ test }) => test.test(value))?.key ?? null;
 }
@@ -72,7 +72,7 @@ function parseSections(lines, dayStartIndex, dayEndIndex, documentPath, dayNumbe
   const sections = [];
   const seenNumbers = new Set();
   let additionalMode = false;
-  const extraOrdinalByNumber = new Map();
+  const extraOrdinal = { value: 0 };
 
   for (let index = 0; index < headers.length; index += 1) {
     const header = headers[index];
@@ -84,12 +84,8 @@ function parseSections(lines, dayStartIndex, dayEndIndex, documentPath, dayNumbe
     const endExclusive = next?.lineIndex ?? dayEndIndex;
     const rawMarkdown = lines.slice(header.lineIndex + 1, endExclusive).join("\n").trim();
 
-    let id = `a1.d${String(dayNumber).padStart(2, "0")}.s${String(header.number).padStart(2, "0")}`;
-    if (isAdditional) {
-      const ordinal = (extraOrdinalByNumber.get(header.number) ?? 0) + 1;
-      extraOrdinalByNumber.set(header.number, ordinal);
-      id = `${id}.extra${ordinal}`;
-    }
+    const baseId = `a1.d${String(dayNumber).padStart(2, "0")}.s${String(header.number).padStart(2, "0")}`;
+    const id = isAdditional ? `${baseId}.extra${String(++extraOrdinal.value).padStart(2, "0")}` : baseId;
 
     sections.push({
       id,
@@ -184,46 +180,22 @@ export function parseCurriculum(sourceText, options = {}) {
     const weekDays = days.filter((day) => day.weekNumber === number);
     const firstDay = weekDays[0];
     const lastDay = weekDays.at(-1);
-    return {
-      id: `a1.w0${number}`,
-      number,
-      title: `Week ${number}`,
-      phaseNumber: Math.ceil(number / 2),
-      days: weekDays,
-      source: sourceRef({ documentPath, weekNumber: number, startLine: firstDay?.source.startLine, endLine: lastDay?.source.endLine }),
-    };
+    return { id: `a1.w0${number}`, number, title: `Week ${number}`, phaseNumber: Math.ceil(number / 2), days: weekDays, source: sourceRef({ documentPath, weekNumber: number, startLine: firstDay?.source.startLine, endLine: lastDay?.source.endLine }) };
   });
 
   const phases = Array.from({ length: 3 }, (_, index) => {
     const number = index + 1;
     const phaseWeeks = weeks.filter((week) => week.phaseNumber === number);
-    return {
-      id: `a1.p0${number}`,
-      number,
-      title: `Phase ${number}`,
-      weekNumbers: phaseWeeks.map((week) => week.number),
-      source: sourceRef({ documentPath, startLine: phaseWeeks[0]?.source.startLine, endLine: phaseWeeks.at(-1)?.source.endLine }),
-    };
+    return { id: `a1.p0${number}`, number, title: `Phase ${number}`, weekNumbers: phaseWeeks.map((week) => week.number), source: sourceRef({ documentPath, startLine: phaseWeeks[0]?.source.startLine, endLine: phaseWeeks.at(-1)?.source.endLine }) };
   });
 
-  return {
-    id: "a1",
-    level: "A1",
-    title: "A1 FINAL 6-WEEK / 42-DAY MASTER CURRICULUM",
-    source: sourceRef({ documentPath, startLine: 1, endLine: lines.length }),
-    phases,
-    weeks,
-    days,
-    finalQaOverrides: qa.raw,
-    sourceText,
-  };
+  return { id: "a1", level: "A1", title: "A1 FINAL 6-WEEK / 42-DAY MASTER CURRICULUM", source: sourceRef({ documentPath, startLine: 1, endLine: lines.length }), phases, weeks, days, finalQaOverrides: qa.raw, sourceText };
 }
 
 export function loadCurriculum(filePath = CANONICAL_A1_PATH) {
   assertCanonicalPath(filePath);
   const resolved = resolve(process.cwd(), filePath);
-  const sourceText = readFileSync(resolved, "utf8");
-  return parseCurriculum(sourceText, { documentPath: CANONICAL_A1_PATH });
+  return parseCurriculum(readFileSync(resolved, "utf8"), { documentPath: CANONICAL_A1_PATH });
 }
 
 export function getSection(day, canonicalKey) {
