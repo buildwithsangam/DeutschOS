@@ -25,13 +25,17 @@ import {
   isDayUnlocked,
   localProgressStorageKey,
   readLocalProgress,
+  type LocalAttempt,
   type LocalLearningProgress,
   type MasteryStatus,
   isPracticeTaskComplete,
+  withAttempt,
   withDayProgress,
   withPracticeTaskCompletion,
 } from "@/modules/learning/domain/local-progress";
 import { practiceTasksForDay } from "@/modules/learning/domain/practice-tasks";
+import { buildReviewQueue, reviewReasonLabel } from "@/modules/learning/domain/review-queue";
+import { buildProgressSummary } from "@/modules/learning/domain/progress-summary";
 import {
   deriveExercisesForDay,
   type A1Exercise,
@@ -358,7 +362,21 @@ function SentenceBuilder({
 // P0.4 Exercise Engine
 // --------------------------------------------------------------------
 
-function ExerciseEngine({ exercises }: { exercises: A1Exercise[] }) {
+type ExerciseAttemptHandler = (input: {
+  exerciseId: string;
+  correct: boolean;
+  result?: LocalAttempt["result"];
+  skill?: LocalAttempt["skill"];
+  response?: string;
+}) => void;
+
+function ExerciseEngine({
+  exercises,
+  onAttempt,
+}: {
+  exercises: A1Exercise[];
+  onAttempt: ExerciseAttemptHandler;
+}) {
   if (!exercises.length) return null;
 
   return (
@@ -366,29 +384,74 @@ function ExerciseEngine({ exercises }: { exercises: A1Exercise[] }) {
       <div className="eyebrow">Practice exercises</div>
       <div className="exercise-list">
         {exercises.map((exercise) => (
-          <ExerciseItem key={exercise.id} exercise={exercise} />
+          <ExerciseItem
+            key={exercise.id}
+            exercise={exercise}
+            onAttempt={onAttempt}
+          />
         ))}
       </div>
     </section>
   );
 }
 
-function ExerciseItem({ exercise }: { exercise: A1Exercise }) {
+function ExerciseItem({
+  exercise,
+  onAttempt,
+}: {
+  exercise: A1Exercise;
+  onAttempt: ExerciseAttemptHandler;
+}) {
   switch (exercise.type) {
     case "flashcard":
-      return <FlashcardRenderer exercise={exercise} />;
+      return (
+        <FlashcardRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "multipleChoice":
-      return <MultipleChoiceRenderer exercise={exercise} />;
+      return (
+        <MultipleChoiceRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "wordOrder":
-      return <WordOrderRenderer exercise={exercise} />;
+      return (
+        <WordOrderRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "fillBlank":
-      return <FillBlankRenderer exercise={exercise} />;
+      return (
+        <FillBlankRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "matchPairs":
-      return <MatchPairsRenderer exercise={exercise} />;
+      return (
+        <MatchPairsRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "typeAnswer":
-      return <TypeAnswerRenderer exercise={exercise} />;
+      return (
+        <TypeAnswerRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "listenSelect":
-      return <ListenSelectRenderer exercise={exercise} />;
+      return (
+        <ListenSelectRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "shadow":
       return <ShadowRenderer exercise={exercise} />;
     case "roleplay":
@@ -404,8 +467,10 @@ function ExerciseItem({ exercise }: { exercise: A1Exercise }) {
 
 function FlashcardRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "flashcard" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(false);
@@ -425,7 +490,15 @@ function FlashcardRenderer({
       <button
         className="button subtle"
         disabled={done}
-        onClick={() => setDone(true)}
+        onClick={() => {
+          setDone(true);
+          onAttempt({
+            exerciseId: exercise.id,
+            correct: true,
+            result: "correct",
+            response: exercise.data.front,
+          });
+        }}
         type="button"
       >
         {done ? "Reviewed" : "Mark reviewed"}
@@ -437,18 +510,22 @@ function FlashcardRenderer({
 
 function MultipleChoiceRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "multipleChoice" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [result, setResult] = useState<"idle" | "correct" | "incorrect">("idle");
 
   const check = () => {
-    if (selected === exercise.data.correctIndex) {
-      setResult("correct");
-    } else {
-      setResult("incorrect");
-    }
+    const correct = selected === exercise.data.correctIndex;
+    setResult(correct ? "correct" : "incorrect");
+    onAttempt({
+      exerciseId: exercise.id,
+      correct,
+      result: correct ? "correct" : "incorrect",
+    });
   };
 
   return (
@@ -485,8 +562,10 @@ function MultipleChoiceRenderer({
 
 function WordOrderRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "wordOrder" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [available, setAvailable] = useState(() => [...exercise.data.tokens]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -494,13 +573,16 @@ function WordOrderRenderer({
 
   const check = () => {
     const sentence = selected.join(" ").replace(/\s+([.,?!:;])/g, "$1");
-    if (
-      normaliseSentence(sentence) === normaliseSentence(exercise.data.answer)
-    ) {
-      setResult("correct");
-    } else {
-      setResult("incorrect");
-    }
+    const correct =
+      normaliseSentence(sentence) === normaliseSentence(exercise.data.answer);
+
+    setResult(correct ? "correct" : "incorrect");
+    onAttempt({
+      exerciseId: exercise.id,
+      correct,
+      result: correct ? "correct" : "incorrect",
+      response: sentence,
+    });
   };
 
   const reset = () => {
@@ -560,14 +642,22 @@ function WordOrderRenderer({
 
 function FillBlankRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "fillBlank" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
 
   const check = () => {
     setSubmitted(true);
+    onAttempt({
+      exerciseId: exercise.id,
+      correct: allCorrect,
+      result: allCorrect ? "correct" : "incorrect",
+      response: JSON.stringify(answers),
+    });
   };
 
   const allCorrect = exercise.data.blanks.every(
@@ -617,8 +707,10 @@ function FillBlankRenderer({
 
 function MatchPairsRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "matchPairs" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const leftOptions = exercise.data.pairs.map((pair) => pair.left);
   const rightOptions = useMemo(
@@ -650,6 +742,8 @@ function MatchPairsRenderer({
     const pair = exercise.data.pairs.find(
       (p) => p.left === selectedLeft && p.right === selectedRight,
     );
+    const correct = Boolean(pair);
+
     if (pair) {
       setMatchedLeft((prev) => new Set(prev).add(selectedLeft));
       setMatchedRight((prev) => new Set(prev).add(selectedRight));
@@ -657,6 +751,16 @@ function MatchPairsRenderer({
     } else {
       setFeedback("incorrect");
     }
+
+    onAttempt({
+      exerciseId: exercise.id,
+      correct,
+      result: correct ? "correct" : "incorrect",
+      response: JSON.stringify({
+        left: selectedLeft,
+        right: selectedRight,
+      }),
+    });
     setSelectedLeft(null);
     setSelectedRight(null);
   }, [selectedLeft, selectedRight, exercise.data.pairs]);
@@ -723,21 +827,27 @@ function MatchPairsRenderer({
 
 function TypeAnswerRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "typeAnswer" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [answer, setAnswer] = useState("");
   const [result, setResult] = useState<"idle" | "correct" | "incorrect">("idle");
 
   const check = () => {
     const accepted = [exercise.data.answer, ...(exercise.data.accepted ?? [])];
-    if (
-      accepted.some((a) => normaliseSentence(a) === normaliseSentence(answer))
-    ) {
-      setResult("correct");
-    } else {
-      setResult("incorrect");
-    }
+    const correct = accepted.some(
+      (a) => normaliseSentence(a) === normaliseSentence(answer),
+    );
+
+    setResult(correct ? "correct" : "incorrect");
+    onAttempt({
+      exerciseId: exercise.id,
+      correct,
+      result: correct ? "correct" : "incorrect",
+      response: answer,
+    });
   };
 
   return (
@@ -759,18 +869,22 @@ function TypeAnswerRenderer({
 
 function ListenSelectRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "listenSelect" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [result, setResult] = useState<"idle" | "correct" | "incorrect">("idle");
 
   const check = () => {
-    if (selected === exercise.data.correctIndex) {
-      setResult("correct");
-    } else {
-      setResult("incorrect");
-    }
+    const correct = selected === exercise.data.correctIndex;
+    setResult(correct ? "correct" : "incorrect");
+    onAttempt({
+      exerciseId: exercise.id,
+      correct,
+      result: correct ? "correct" : "incorrect",
+    });
   };
 
   return (
@@ -1256,6 +1370,7 @@ export function A1LearningMvp({
   const [view, setView] = useState<View>("today");
   const [speechRate, setSpeechRate] = useState(1);
   const [examTrack, setExamTrack] = useState("goethe");
+  const [focusedExerciseId, setFocusedExerciseId] = useState<string | null>(null);
 
   useEffect(() => {
     const savedProgress = readLocalProgress(
@@ -1306,9 +1421,8 @@ export function A1LearningMvp({
     const item = dayProgress(progress, day.dayNumber);
     return item.lessonCompleted && item.practiceCompleted;
   }).length;
-  const reviewDays = curriculum.days.filter(
-    (day) => dayProgress(progress, day.dayNumber).needsReview,
-  );
+  const reviewQueue = buildReviewQueue(progress).slice(0, 10);
+  const progressSummary = buildProgressSummary(curriculum, progress);
 
   const vocabularyItems: CoreVocabularyItem[] = curriculum.days.flatMap(
     (day) =>
@@ -1334,8 +1448,37 @@ export function A1LearningMvp({
     );
   const chooseDay = (dayNumber: number) => {
     if (!isDayUnlocked(progress, dayNumber)) return;
+    setFocusedExerciseId(null);
     setProgress((current) => ({ ...current, currentDay: dayNumber }));
     setView("day");
+  };
+
+  const chooseReviewExercise = (dayNumber: number, exerciseId: string) => {
+    if (!isDayUnlocked(progress, dayNumber)) return;
+    setFocusedExerciseId(exerciseId);
+    setProgress((current) => ({ ...current, currentDay: dayNumber }));
+    setView("day");
+  };
+
+  const recordAttempt: ExerciseAttemptHandler = ({
+    exerciseId,
+    correct,
+    result,
+    skill,
+    response,
+  }) => {
+    const attempt: LocalAttempt = {
+      id: crypto.randomUUID(),
+      dayNumber: activeDay.dayNumber,
+      exerciseId,
+      correct,
+      result,
+      skill,
+      response,
+      at: new Date().toISOString(),
+    };
+
+    setProgress((current) => withAttempt(current, attempt));
   };
 
   const handleResetProgress = () => {
@@ -1405,18 +1548,18 @@ export function A1LearningMvp({
             <button className="button primary" onClick={() => setView("day")}>
               {completedTargets === totalTargets ? "Review day" : "Start / Continue"}
             </button>
-            {reviewDays.length > 0 && (
+            {reviewQueue.length > 0 && (
               <button className="button secondary" onClick={() => setView("review")}>
-                Review what’s shaky ({reviewDays.length})
+                Review what’s shaky ({reviewQueue.length})
               </button>
             )}
           </div>
         </div>
         <div className="progress-panel">
           <h3>Overall A1 progress</h3>
-          <progress value={completedDays} max={42}></progress>
+          <progress value={progressSummary.completedDays} max={progressSummary.totalDays}></progress>
           <p>
-            {completedDays}/42 days complete
+            {progressSummary.completedDays}/{progressSummary.totalDays} days complete
           </p>
           <h4>Today’s completion</h4>
           <div className="today-progress-bar">
@@ -1432,11 +1575,11 @@ export function A1LearningMvp({
         </div>
         <div className="dashboard-aside">
           <strong>
-            {reviewDays.length
-              ? `${reviewDays.length} item${
-                  reviewDays.length === 1 ? "" : "s"
-                } needs review`
-              : "No items marked for review"}
+            {reviewQueue.length
+              ? `${reviewQueue.length} item${
+                  reviewQueue.length === 1 ? "" : "s"
+                } ready for review`
+              : "No review items right now"}
           </strong>
           <p>
             Review is learner-controlled in this local milestone. No SRS claim
@@ -1503,35 +1646,59 @@ export function A1LearningMvp({
 
   const renderReview = () => (
     <section className="review-panel">
-      <div className="eyebrow">Needs review</div>
-      <h2>Return to a marked learning day</h2>
-      {reviewDays.length ? (
-        reviewDays.map((day) => (
-          <article className="review-item" key={day.dayNumber}>
-            <div>
-              <strong>Day {day.dayNumber}</strong>
-              <span>{day.title}</span>
-            </div>
-            <div className="button-row">
-              <button
-                className="button secondary"
-                onClick={() => chooseDay(day.dayNumber)}
-              >
-                Open day
-              </button>
-              <button
-                className="button subtle"
-                onClick={() => updateDay(day.dayNumber, { needsReview: false })}
-              >
-                Clear review
-              </button>
-            </div>
-          </article>
-        ))
+      <div className="eyebrow">Retrieval queue</div>
+      <h2>Review what needs another pass</h2>
+      {reviewQueue.length ? (
+        reviewQueue.map((candidate) => {
+          const day = curriculum.days.find(
+            (item) => item.dayNumber === candidate.dayNumber,
+          );
+
+          return (
+            <article
+              className="review-item"
+              key={`${candidate.exerciseId}-${candidate.lastAttemptAt}`}
+            >
+              <div>
+                <strong>Day {candidate.dayNumber}</strong>
+                <span>{day?.title ?? "Learning day"}</span>
+                <small>
+                  {candidate.exerciseId} · {reviewReasonLabel(candidate.reason)}
+                </small>
+              </div>
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  onClick={() =>
+                    chooseReviewExercise(candidate.dayNumber, candidate.exerciseId)
+                  }
+                >
+                  Review exercise
+                </button>
+                <button
+                  className="button subtle"
+                  onClick={() => chooseDay(candidate.dayNumber)}
+                >
+                  Open day
+                </button>
+                {candidate.reason === "needs_review" ? (
+                  <button
+                    className="button subtle"
+                    onClick={() =>
+                      updateDay(candidate.dayNumber, { needsReview: false })
+                    }
+                  >
+                    Clear flag
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })
       ) : (
         <p>
-          Nothing is marked Needs Review. Mark any day from its lesson page when
-          you want to revisit it.
+          Nothing needs review right now. New mistakes and recent practice will
+          appear here automatically.
         </p>
       )}
     </section>
@@ -1578,7 +1745,31 @@ export function A1LearningMvp({
         </aside>
       ) : null}
       <DailyGermanCore day={activeDay} />
-      <ExerciseEngine exercises={dayExercises} />
+      {focusedExerciseId ? (
+        <div className="review-focus-card">
+          <div>
+            <div className="eyebrow">Review focus</div>
+            <p>
+              Revisit the flagged exercise before returning to the full day.
+            </p>
+          </div>
+          <button
+            className="button subtle"
+            onClick={() => setFocusedExerciseId(null)}
+            type="button"
+          >
+            Show all day practice
+          </button>
+        </div>
+      ) : null}
+      <ExerciseEngine
+        exercises={
+          focusedExerciseId
+            ? dayExercises.filter((exercise) => exercise.id === focusedExerciseId)
+            : dayExercises
+        }
+        onAttempt={recordAttempt}
+      />
       <LearningFlow day={activeDay} />
       {lessonFlow
         .filter((flow) => flow.id !== "mastery")
