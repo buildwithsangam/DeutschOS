@@ -25,9 +25,11 @@ import {
   isDayUnlocked,
   localProgressStorageKey,
   readLocalProgress,
+  type LocalAttempt,
   type LocalLearningProgress,
   type MasteryStatus,
   isPracticeTaskComplete,
+  withAttempt,
   withDayProgress,
   withPracticeTaskCompletion,
 } from "@/modules/learning/domain/local-progress";
@@ -358,7 +360,21 @@ function SentenceBuilder({
 // P0.4 Exercise Engine
 // --------------------------------------------------------------------
 
-function ExerciseEngine({ exercises }: { exercises: A1Exercise[] }) {
+type ExerciseAttemptHandler = (input: {
+  exerciseId: string;
+  correct: boolean;
+  result?: LocalAttempt["result"];
+  skill?: LocalAttempt["skill"];
+  response?: string;
+}) => void;
+
+function ExerciseEngine({
+  exercises,
+  onAttempt,
+}: {
+  exercises: A1Exercise[];
+  onAttempt: ExerciseAttemptHandler;
+}) {
   if (!exercises.length) return null;
 
   return (
@@ -366,29 +382,69 @@ function ExerciseEngine({ exercises }: { exercises: A1Exercise[] }) {
       <div className="eyebrow">Practice exercises</div>
       <div className="exercise-list">
         {exercises.map((exercise) => (
-          <ExerciseItem key={exercise.id} exercise={exercise} />
+          <ExerciseItem
+            key={exercise.id}
+            exercise={exercise}
+            onAttempt={onAttempt}
+          />
         ))}
       </div>
     </section>
   );
 }
 
-function ExerciseItem({ exercise }: { exercise: A1Exercise }) {
+function ExerciseItem({
+  exercise,
+  onAttempt,
+}: {
+  exercise: A1Exercise;
+  onAttempt: ExerciseAttemptHandler;
+}) {
   switch (exercise.type) {
     case "flashcard":
       return <FlashcardRenderer exercise={exercise} />;
     case "multipleChoice":
-      return <MultipleChoiceRenderer exercise={exercise} />;
+      return (
+        <MultipleChoiceRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "wordOrder":
-      return <WordOrderRenderer exercise={exercise} />;
+      return (
+        <WordOrderRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "fillBlank":
-      return <FillBlankRenderer exercise={exercise} />;
+      return (
+        <FillBlankRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "matchPairs":
-      return <MatchPairsRenderer exercise={exercise} />;
+      return (
+        <MatchPairsRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "typeAnswer":
-      return <TypeAnswerRenderer exercise={exercise} />;
+      return (
+        <TypeAnswerRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "listenSelect":
-      return <ListenSelectRenderer exercise={exercise} />;
+      return (
+        <ListenSelectRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "shadow":
       return <ShadowRenderer exercise={exercise} />;
     case "roleplay":
@@ -437,18 +493,22 @@ function FlashcardRenderer({
 
 function MultipleChoiceRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "multipleChoice" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [result, setResult] = useState<"idle" | "correct" | "incorrect">("idle");
 
   const check = () => {
-    if (selected === exercise.data.correctIndex) {
-      setResult("correct");
-    } else {
-      setResult("incorrect");
-    }
+    const correct = selected === exercise.data.correctIndex;
+    setResult(correct ? "correct" : "incorrect");
+    onAttempt({
+      exerciseId: exercise.id,
+      correct,
+      result: correct ? "correct" : "incorrect",
+    });
   };
 
   return (
@@ -485,8 +545,10 @@ function MultipleChoiceRenderer({
 
 function WordOrderRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "wordOrder" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [available, setAvailable] = useState(() => [...exercise.data.tokens]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -494,13 +556,16 @@ function WordOrderRenderer({
 
   const check = () => {
     const sentence = selected.join(" ").replace(/\s+([.,?!:;])/g, "$1");
-    if (
-      normaliseSentence(sentence) === normaliseSentence(exercise.data.answer)
-    ) {
-      setResult("correct");
-    } else {
-      setResult("incorrect");
-    }
+    const correct =
+      normaliseSentence(sentence) === normaliseSentence(exercise.data.answer);
+
+    setResult(correct ? "correct" : "incorrect");
+    onAttempt({
+      exerciseId: exercise.id,
+      correct,
+      result: correct ? "correct" : "incorrect",
+      response: sentence,
+    });
   };
 
   const reset = () => {
@@ -560,14 +625,22 @@ function WordOrderRenderer({
 
 function FillBlankRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "fillBlank" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
 
   const check = () => {
     setSubmitted(true);
+    onAttempt({
+      exerciseId: exercise.id,
+      correct: allCorrect,
+      result: allCorrect ? "correct" : "incorrect",
+      response: JSON.stringify(answers),
+    });
   };
 
   const allCorrect = exercise.data.blanks.every(
@@ -617,8 +690,10 @@ function FillBlankRenderer({
 
 function MatchPairsRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "matchPairs" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const leftOptions = exercise.data.pairs.map((pair) => pair.left);
   const rightOptions = useMemo(
@@ -650,6 +725,8 @@ function MatchPairsRenderer({
     const pair = exercise.data.pairs.find(
       (p) => p.left === selectedLeft && p.right === selectedRight,
     );
+    const correct = Boolean(pair);
+
     if (pair) {
       setMatchedLeft((prev) => new Set(prev).add(selectedLeft));
       setMatchedRight((prev) => new Set(prev).add(selectedRight));
@@ -657,6 +734,16 @@ function MatchPairsRenderer({
     } else {
       setFeedback("incorrect");
     }
+
+    onAttempt({
+      exerciseId: exercise.id,
+      correct,
+      result: correct ? "correct" : "incorrect",
+      response: JSON.stringify({
+        left: selectedLeft,
+        right: selectedRight,
+      }),
+    });
     setSelectedLeft(null);
     setSelectedRight(null);
   }, [selectedLeft, selectedRight, exercise.data.pairs]);
@@ -723,21 +810,27 @@ function MatchPairsRenderer({
 
 function TypeAnswerRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "typeAnswer" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [answer, setAnswer] = useState("");
   const [result, setResult] = useState<"idle" | "correct" | "incorrect">("idle");
 
   const check = () => {
     const accepted = [exercise.data.answer, ...(exercise.data.accepted ?? [])];
-    if (
-      accepted.some((a) => normaliseSentence(a) === normaliseSentence(answer))
-    ) {
-      setResult("correct");
-    } else {
-      setResult("incorrect");
-    }
+    const correct = accepted.some(
+      (a) => normaliseSentence(a) === normaliseSentence(answer),
+    );
+
+    setResult(correct ? "correct" : "incorrect");
+    onAttempt({
+      exerciseId: exercise.id,
+      correct,
+      result: correct ? "correct" : "incorrect",
+      response: answer,
+    });
   };
 
   return (
@@ -759,18 +852,22 @@ function TypeAnswerRenderer({
 
 function ListenSelectRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "listenSelect" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [result, setResult] = useState<"idle" | "correct" | "incorrect">("idle");
 
   const check = () => {
-    if (selected === exercise.data.correctIndex) {
-      setResult("correct");
-    } else {
-      setResult("incorrect");
-    }
+    const correct = selected === exercise.data.correctIndex;
+    setResult(correct ? "correct" : "incorrect");
+    onAttempt({
+      exerciseId: exercise.id,
+      correct,
+      result: correct ? "correct" : "incorrect",
+    });
   };
 
   return (
@@ -1338,6 +1435,27 @@ export function A1LearningMvp({
     setView("day");
   };
 
+  const recordAttempt: ExerciseAttemptHandler = ({
+    exerciseId,
+    correct,
+    result,
+    skill,
+    response,
+  }) => {
+    const attempt: LocalAttempt = {
+      id: crypto.randomUUID(),
+      dayNumber: activeDay.dayNumber,
+      exerciseId,
+      correct,
+      result,
+      skill,
+      response,
+      at: new Date().toISOString(),
+    };
+
+    setProgress((current) => withAttempt(current, attempt));
+  };
+
   const handleResetProgress = () => {
     if (confirm("Reset all local learning progress? This cannot be undone.")) {
       const fresh = createLocalProgress();
@@ -1578,7 +1696,10 @@ export function A1LearningMvp({
         </aside>
       ) : null}
       <DailyGermanCore day={activeDay} />
-      <ExerciseEngine exercises={dayExercises} />
+      <ExerciseEngine
+        exercises={dayExercises}
+        onAttempt={recordAttempt}
+      />
       <LearningFlow day={activeDay} />
       {lessonFlow
         .filter((flow) => flow.id !== "mastery")
