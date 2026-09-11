@@ -403,7 +403,12 @@ function ExerciseItem({
 }) {
   switch (exercise.type) {
     case "flashcard":
-      return <FlashcardRenderer exercise={exercise} />;
+      return (
+        <FlashcardRenderer
+          exercise={exercise}
+          onAttempt={onAttempt}
+        />
+      );
     case "multipleChoice":
       return (
         <MultipleChoiceRenderer
@@ -461,8 +466,10 @@ function ExerciseItem({
 
 function FlashcardRenderer({
   exercise,
+  onAttempt,
 }: {
   exercise: Extract<A1Exercise, { type: "flashcard" }>;
+  onAttempt: ExerciseAttemptHandler;
 }) {
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(false);
@@ -482,7 +489,15 @@ function FlashcardRenderer({
       <button
         className="button subtle"
         disabled={done}
-        onClick={() => setDone(true)}
+        onClick={() => {
+          setDone(true);
+          onAttempt({
+            exerciseId: exercise.id,
+            correct: true,
+            result: "correct",
+            response: exercise.data.front,
+          });
+        }}
         type="button"
       >
         {done ? "Reviewed" : "Mark reviewed"}
