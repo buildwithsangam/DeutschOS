@@ -1369,6 +1369,7 @@ export function A1LearningMvp({
   const [view, setView] = useState<View>("today");
   const [speechRate, setSpeechRate] = useState(1);
   const [examTrack, setExamTrack] = useState("goethe");
+  const [focusedExerciseId, setFocusedExerciseId] = useState<string | null>(null);
 
   useEffect(() => {
     const savedProgress = readLocalProgress(
@@ -1445,6 +1446,14 @@ export function A1LearningMvp({
     );
   const chooseDay = (dayNumber: number) => {
     if (!isDayUnlocked(progress, dayNumber)) return;
+    setFocusedExerciseId(null);
+    setProgress((current) => ({ ...current, currentDay: dayNumber }));
+    setView("day");
+  };
+
+  const chooseReviewExercise = (dayNumber: number, exerciseId: string) => {
+    if (!isDayUnlocked(progress, dayNumber)) return;
+    setFocusedExerciseId(exerciseId);
     setProgress((current) => ({ ...current, currentDay: dayNumber }));
     setView("day");
   };
@@ -1658,6 +1667,14 @@ export function A1LearningMvp({
               <div className="button-row">
                 <button
                   className="button secondary"
+                  onClick={() =>
+                    chooseReviewExercise(candidate.dayNumber, candidate.exerciseId)
+                  }
+                >
+                  Review exercise
+                </button>
+                <button
+                  className="button subtle"
                   onClick={() => chooseDay(candidate.dayNumber)}
                 >
                   Open day
@@ -1726,8 +1743,29 @@ export function A1LearningMvp({
         </aside>
       ) : null}
       <DailyGermanCore day={activeDay} />
+      {focusedExerciseId ? (
+        <div className="review-focus-card">
+          <div>
+            <div className="eyebrow">Review focus</div>
+            <p>
+              Revisit the flagged exercise before returning to the full day.
+            </p>
+          </div>
+          <button
+            className="button subtle"
+            onClick={() => setFocusedExerciseId(null)}
+            type="button"
+          >
+            Show all day practice
+          </button>
+        </div>
+      ) : null}
       <ExerciseEngine
-        exercises={dayExercises}
+        exercises={
+          focusedExerciseId
+            ? dayExercises.filter((exercise) => exercise.id === focusedExerciseId)
+            : dayExercises
+        }
         onAttempt={recordAttempt}
       />
       <LearningFlow day={activeDay} />
