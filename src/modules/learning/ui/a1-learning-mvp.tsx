@@ -35,6 +35,7 @@ import {
 } from "@/modules/learning/domain/local-progress";
 import { practiceTasksForDay } from "@/modules/learning/domain/practice-tasks";
 import { buildReviewQueue, reviewReasonLabel } from "@/modules/learning/domain/review-queue";
+import { buildProgressSummary } from "@/modules/learning/domain/progress-summary";
 import {
   deriveExercisesForDay,
   type A1Exercise,
@@ -1421,6 +1422,7 @@ export function A1LearningMvp({
     return item.lessonCompleted && item.practiceCompleted;
   }).length;
   const reviewQueue = buildReviewQueue(progress).slice(0, 10);
+  const progressSummary = buildProgressSummary(curriculum, progress);
 
   const vocabularyItems: CoreVocabularyItem[] = curriculum.days.flatMap(
     (day) =>
@@ -1555,9 +1557,9 @@ export function A1LearningMvp({
         </div>
         <div className="progress-panel">
           <h3>Overall A1 progress</h3>
-          <progress value={completedDays} max={42}></progress>
+          <progress value={progressSummary.completedDays} max={progressSummary.totalDays}></progress>
           <p>
-            {completedDays}/42 days complete
+            {progressSummary.completedDays}/{progressSummary.totalDays} days complete
           </p>
           <h4>Today’s completion</h4>
           <div className="today-progress-bar">
