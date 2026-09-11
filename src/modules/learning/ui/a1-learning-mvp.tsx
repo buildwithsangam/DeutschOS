@@ -34,6 +34,7 @@ import {
   withPracticeTaskCompletion,
 } from "@/modules/learning/domain/local-progress";
 import { practiceTasksForDay } from "@/modules/learning/domain/practice-tasks";
+import { buildReviewQueue, reviewReasonLabel } from "@/modules/learning/domain/review-queue";
 import {
   deriveExercisesForDay,
   type A1Exercise,
@@ -1403,9 +1404,7 @@ export function A1LearningMvp({
     const item = dayProgress(progress, day.dayNumber);
     return item.lessonCompleted && item.practiceCompleted;
   }).length;
-  const reviewDays = curriculum.days.filter(
-    (day) => dayProgress(progress, day.dayNumber).needsReview,
-  );
+  const reviewQueue = buildReviewQueue(progress).slice(0, 10);
 
   const vocabularyItems: CoreVocabularyItem[] = curriculum.days.flatMap(
     (day) =>
@@ -1523,9 +1522,9 @@ export function A1LearningMvp({
             <button className="button primary" onClick={() => setView("day")}>
               {completedTargets === totalTargets ? "Review day" : "Start / Continue"}
             </button>
-            {reviewDays.length > 0 && (
+            {reviewQueue.length > 0 && (
               <button className="button secondary" onClick={() => setView("review")}>
-                Review what’s shaky ({reviewDays.length})
+                Review what’s shaky ({reviewQueue.length})
               </button>
             )}
           </div>
@@ -1550,11 +1549,11 @@ export function A1LearningMvp({
         </div>
         <div className="dashboard-aside">
           <strong>
-            {reviewDays.length
-              ? `${reviewDays.length} item${
-                  reviewDays.length === 1 ? "" : "s"
-                } needs review`
-              : "No items marked for review"}
+            {reviewQueue.length
+              ? `${reviewQueue.length} item${
+                  reviewQueue.length === 1 ? "" : "s"
+                } ready for review`
+              : "No review items right now"}
           </strong>
           <p>
             Review is learner-controlled in this local milestone. No SRS claim
@@ -1621,35 +1620,51 @@ export function A1LearningMvp({
 
   const renderReview = () => (
     <section className="review-panel">
-      <div className="eyebrow">Needs review</div>
-      <h2>Return to a marked learning day</h2>
-      {reviewDays.length ? (
-        reviewDays.map((day) => (
-          <article className="review-item" key={day.dayNumber}>
-            <div>
-              <strong>Day {day.dayNumber}</strong>
-              <span>{day.title}</span>
-            </div>
-            <div className="button-row">
-              <button
-                className="button secondary"
-                onClick={() => chooseDay(day.dayNumber)}
-              >
-                Open day
-              </button>
-              <button
-                className="button subtle"
-                onClick={() => updateDay(day.dayNumber, { needsReview: false })}
-              >
-                Clear review
-              </button>
-            </div>
-          </article>
-        ))
+      <div className="eyebrow">Retrieval queue</div>
+      <h2>Review what needs another pass</h2>
+      {reviewQueue.length ? (
+        reviewQueue.map((candidate) => {
+          const day = curriculum.days.find(
+            (item) => item.dayNumber === candidate.dayNumber,
+          );
+
+          return (
+            <article
+              className="review-item"
+              key={`${candidate.exerciseId}-${candidate.lastAttemptAt}`}
+            >
+              <div>
+                <strong>Day {candidate.dayNumber}</strong>
+                <span>{day?.title ?? "Learning day"}</span>
+                <small>
+                  {candidate.exerciseId} · {reviewReasonLabel(candidate.reason)}
+                </small>
+              </div>
+              <div className="button-row">
+                <button
+                  className="button secondary"
+                  onClick={() => chooseDay(candidate.dayNumber)}
+                >
+                  Open day
+                </button>
+                {candidate.reason === "needs_review" ? (
+                  <button
+                    className="button subtle"
+                    onClick={() =>
+                      updateDay(candidate.dayNumber, { needsReview: false })
+                    }
+                  >
+                    Clear flag
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })
       ) : (
         <p>
-          Nothing is marked Needs Review. Mark any day from its lesson page when
-          you want to revisit it.
+          Nothing needs review right now. New mistakes and recent practice will
+          appear here automatically.
         </p>
       )}
     </section>
