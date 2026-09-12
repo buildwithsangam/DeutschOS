@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createGeminiHandoffPrompt, type GeminiTutorMode } from "@/modules/ai/application/create-gemini-handoff";
+import {
+  DEFAULT_EXAM_TRACK_ID,
+  EXAM_TRACK_IDS,
+  EXAM_TRACK_METADATA,
+  normalizeExamTrackId,
+  type ExamTrackId,
+} from "@/modules/exam/domain/exam-track";
 import type {
   A1Curriculum,
   A1Day,
@@ -1369,7 +1376,9 @@ export function A1LearningMvp({
   const [hydrated, setHydrated] = useState(false);
   const [view, setView] = useState<View>("today");
   const [speechRate, setSpeechRate] = useState(1);
-  const [examTrack, setExamTrack] = useState("goethe");
+  const [examTrack, setExamTrack] = useState<ExamTrackId>(
+    DEFAULT_EXAM_TRACK_ID,
+  );
   const [focusedExerciseId, setFocusedExerciseId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1378,10 +1387,12 @@ export function A1LearningMvp({
     );
     const savedRate = window.localStorage.getItem("deutschos.speech-rate");
     const savedTrack = window.localStorage.getItem("deutschos.exam-track");
+    const normalizedTrack =
+      normalizeExamTrackId(savedTrack) ?? DEFAULT_EXAM_TRACK_ID;
     const timer = window.setTimeout(() => {
       setProgress(savedProgress);
       if (savedRate) setSpeechRate(parseFloat(savedRate));
-      if (savedTrack) setExamTrack(savedTrack);
+      setExamTrack(normalizedTrack);
       setHydrated(true);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -1974,29 +1985,43 @@ function ExamView({
   examTrack,
   setExamTrack,
 }: {
-  examTrack: string;
-  setExamTrack: (track: string) => void;
+  examTrack: ExamTrackId;
+  setExamTrack: (track: ExamTrackId) => void;
 }) {
+  const activeMetadata = EXAM_TRACK_METADATA[examTrack];
+
   return (
     <section className="exam-view">
       <div className="eyebrow">Exam track</div>
       <h2>Choose an exam overlay</h2>
       <p>Days 1–35 use the same German. Track-specific formats are an overlay only.</p>
+
       <div className="exam-tracks">
-        {["goethe", "telc", "ösd"].map((track) => (
+        {EXAM_TRACK_IDS.map((track) => (
           <button
             key={track}
             className={examTrack === track ? "active" : ""}
             onClick={() => setExamTrack(track)}
           >
-            {track.toUpperCase()}
+            {EXAM_TRACK_METADATA[track].displayName}
           </button>
         ))}
       </div>
-      <p className="muted">
-        Current exam timings and resources are not verified in this repository
-        and are intentionally left unverified.
-      </p>
+
+      <div className="exam-track-details">
+        <h3>{activeMetadata.displayName}</h3>
+        <p>{activeMetadata.verifiedFormatTiming}</p>
+        <p>
+          Day 42 official resource:{" "}
+          <a
+            href={activeMetadata.officialDay42ResourceReference}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {activeMetadata.officialDay42ResourceLabel}
+          </a>
+        </p>
+      </div>
     </section>
   );
 }
@@ -2010,8 +2035,8 @@ function SettingsView({
 }: {
   speechRate: number;
   setSpeechRate: (rate: number) => void;
-  examTrack: string;
-  setExamTrack: (track: string) => void;
+  examTrack: ExamTrackId;
+  setExamTrack: (track: ExamTrackId) => void;
   onResetProgress: () => void;
 }) {
   return (
@@ -2034,11 +2059,17 @@ function SettingsView({
         Exam track
         <select
           value={examTrack}
-          onChange={(e) => setExamTrack(e.target.value)}
+          onChange={(e) =>
+            setExamTrack(
+              normalizeExamTrackId(e.target.value) ?? DEFAULT_EXAM_TRACK_ID,
+            )
+          }
         >
-          <option value="goethe">Goethe</option>
-          <option value="telc">telc</option>
-          <option value="ösd">ÖSD</option>
+          {EXAM_TRACK_IDS.map((track) => (
+            <option key={track} value={track}>
+              {EXAM_TRACK_METADATA[track].displayName}
+            </option>
+          ))}
         </select>
       </label>
       <div className="danger-zone">
