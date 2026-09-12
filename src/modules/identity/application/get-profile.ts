@@ -1,5 +1,6 @@
 import "server-only";
 
+import { normalizeExamTrackId } from "@/modules/exam/domain/exam-track";
 import type { Profile } from "@/modules/identity/domain/profile";
 import { createSupabaseServerClient } from "@/shared/infrastructure/supabase/server";
 
@@ -8,7 +9,9 @@ function rowToProfile(row: Record<string, unknown>): Profile {
     id: row.id as string,
     displayName: (row.display_name as string | null) ?? null,
     timezone: row.timezone as string,
-    targetExamTrackId: (row.target_exam_track_id as string | null) ?? null,
+    targetExamTrackId: normalizeExamTrackId(
+      (row.target_exam_track_id as string | null) ?? null,
+    ),
     consentVersion: (row.consent_version as string | null) ?? null,
     consentedAt: (row.consented_at as string | null) ?? null,
     createdAt: row.created_at as string,
