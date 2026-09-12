@@ -1,5 +1,6 @@
 import "server-only";
 
+import { normalizeExamTrackId } from "@/modules/exam/domain/exam-track";
 import type { UpdateableProfileFields } from "@/modules/identity/domain/profile";
 import { createSupabaseServerClient } from "@/shared/infrastructure/supabase/server";
 
@@ -27,7 +28,7 @@ export async function updateProfile(
     update.timezone = fields.timezone;
   }
   if (fields.targetExamTrackId !== undefined) {
-    update.target_exam_track_id = fields.targetExamTrackId;
+    update.target_exam_track_id = normalizeExamTrackId(fields.targetExamTrackId);
   }
 
   if (Object.keys(update).length === 0) {
