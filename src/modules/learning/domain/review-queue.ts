@@ -1,7 +1,14 @@
 import type { LocalAttempt, LocalLearningProgress } from "@/modules/learning/domain/local-progress";
 import { attemptsForExercise, dayProgress } from "@/modules/learning/domain/local-progress";
+import {
+  buildScheduledReviewQueue,
+  interleaveReviewQueue,
+  type ReviewScheduleState,
+} from "@/modules/learning/domain/srs";
 
 export type ReviewReason =
+  | "due"
+  | "overdue"
   | "recent_failure"
   | "repeated_failure"
   | "needs_review"
@@ -14,6 +21,8 @@ export type ReviewCandidate = {
   score: number;
   failureCount: number;
   lastAttemptAt: string;
+  dueAt?: string;
+  overdueDays?: number;
 };
 
 export type ReviewExercise = {
@@ -27,17 +36,44 @@ function latestAttempt(attempts: LocalAttempt[]) {
   return [...attempts].sort((a, b) => b.at.localeCompare(a.at))[0];
 }
 
+function latestFailure(attempts: LocalAttempt[]) {
+  return attempts
+    .filter((attempt) => !attempt.correct)
+    .sort((a, b) => b.at.localeCompare(a.at))[0];
+}
+
 /**
- * Deterministic P0.5 review candidates.
- *
- * Priority is intentionally simple: recent failures first, then repeated
- * failures, then explicit day-level review flags, then recent exposure.
- * This is a retrieval queue, not an FSRS implementation or mastery model.
+ * Local review queue. When SRS state is available, due/overdue scheduling is
+ * authoritative. The legacy evidence signals remain as a migration-safe
+ * fallback for learners whose older attempts predate persisted scheduling.
  */
 export function buildReviewQueue(
   progress: LocalLearningProgress,
   now = new Date(),
+  scheduleStates: ReviewScheduleState[] = [],
 ): ReviewCandidate[] {
+  if (scheduleStates.length > 0) {
+    const scheduled = interleaveReviewQueue(
+      buildScheduledReviewQueue(scheduleStates, now, 10),
+    );
+
+    return scheduled.map((candidate) => {
+      const attempts = attemptsForExercise(progress, candidate.exerciseId);
+      const failures = attempts.filter((attempt) => !attempt.correct);
+      const latest = latestAttempt(attempts);
+      return {
+        exerciseId: candidate.exerciseId,
+        dayNumber: candidate.dayNumber,
+        reason: candidate.overdueDays > 0 ? "overdue" : "due",
+        score: candidate.priority,
+        failureCount: Math.max(candidate.lapses, failures.length),
+        lastAttemptAt: latest?.at ?? candidate.lastReviewedAt ?? candidate.dueAt,
+        dueAt: candidate.dueAt,
+        overdueDays: candidate.overdueDays,
+      };
+    });
+  }
+
   const byExercise = new Map<string, LocalAttempt[]>();
 
   for (const attempt of progress.attempts) {
@@ -98,14 +134,12 @@ export function buildReviewQueue(
   });
 }
 
-function latestFailure(attempts: LocalAttempt[]) {
-  return attempts
-    .filter((attempt) => !attempt.correct)
-    .sort((a, b) => b.at.localeCompare(a.at))[0];
-}
-
 export function reviewReasonLabel(reason: ReviewReason): string {
   switch (reason) {
+    case "due":
+      return "Due now";
+    case "overdue":
+      return "Overdue";
     case "recent_failure":
       return "Recent mistake";
     case "repeated_failure":
@@ -120,11 +154,14 @@ export function reviewReasonLabel(reason: ReviewReason): string {
 export function reviewExercises(
   progress: LocalLearningProgress,
   limit = 10,
+  scheduleStates: ReviewScheduleState[] = [],
 ): ReviewExercise[] {
-  return buildReviewQueue(progress).slice(0, Math.max(0, limit)).map((candidate) => ({
-    exerciseId: candidate.exerciseId,
-    dayNumber: candidate.dayNumber,
-  }));
+  return buildReviewQueue(progress, new Date(), scheduleStates)
+    .slice(0, Math.max(0, limit))
+    .map((candidate) => ({
+      exerciseId: candidate.exerciseId,
+      dayNumber: candidate.dayNumber,
+    }));
 }
 
 export { attemptsForExercise };

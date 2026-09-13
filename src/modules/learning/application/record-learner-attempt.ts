@@ -13,6 +13,11 @@ import {
   localAttemptToEvidence,
   type LearnerEvidenceRecord,
 } from "@/modules/learning/domain/learner-evidence";
+import {
+  initialReviewState,
+  scheduleReview,
+  type ReviewScheduleState,
+} from "@/modules/learning/domain/srs";
 
 type RecordLearnerAttemptResult =
   | { persisted: true }
@@ -45,6 +50,21 @@ function projectionToRow(
   };
 }
 
+function reviewStateToRow(state: ReviewScheduleState) {
+  return {
+    learner_id: state.learnerId,
+    exercise_id: state.exerciseId,
+    day_number: state.dayNumber,
+    skill: state.skill ?? null,
+    repetitions: state.repetitions,
+    lapses: state.lapses,
+    interval_days: state.intervalDays,
+    ease_factor: state.easeFactor,
+    due_at: state.dueAt,
+    last_reviewed_at: state.lastReviewedAt,
+  };
+}
+
 export async function recordLearnerAttempt(
   attempt: LocalAttempt,
 ): Promise<RecordLearnerAttemptResult> {
@@ -55,7 +75,6 @@ export async function recordLearnerAttempt(
   }
 
   const evidence = localAttemptToEvidence(learnerId, attempt);
-
   const supabase = await createSupabaseServerClient();
 
   const { error: insertError } = await supabase
@@ -112,17 +131,71 @@ export async function recordLearnerAttempt(
   }
 
   const admin = createSupabaseAdminClient();
-
   const { error: masteryError } = await admin
     .from("learner_mastery_snapshots")
     .upsert(
-      projections.map((projection) =>
-        projectionToRow(learnerId, projection),
-      ),
+      projections.map((projection) => projectionToRow(learnerId, projection)),
       { onConflict: "learner_id,scope,scope_key" },
     );
 
   if (masteryError) {
+    return { persisted: false, reason: "failed" };
+  }
+
+  const { data: existingReviewState, error: reviewReadError } = await supabase
+    .from("learner_review_states")
+    .select(
+      "learner_id, exercise_id, day_number, skill, repetitions, lapses, interval_days, ease_factor, due_at, last_reviewed_at",
+    )
+    .eq("learner_id", learnerId)
+    .eq("exercise_id", attempt.exerciseId)
+    .maybeSingle();
+
+  if (reviewReadError) {
+    return { persisted: false, reason: "failed" };
+  }
+
+  const previous: ReviewScheduleState | null = existingReviewState
+    ? {
+        learnerId: existingReviewState.learner_id,
+        exerciseId: existingReviewState.exercise_id,
+        dayNumber: existingReviewState.day_number,
+        skill: existingReviewState.skill ?? undefined,
+        repetitions: existingReviewState.repetitions,
+        lapses: existingReviewState.lapses,
+        intervalDays: Number(existingReviewState.interval_days),
+        easeFactor: Number(existingReviewState.ease_factor),
+        dueAt: existingReviewState.due_at,
+        lastReviewedAt: existingReviewState.last_reviewed_at,
+      }
+    : null;
+
+  const nextState = previous
+    ? scheduleReview(
+        {
+          ...previous,
+          dayNumber: attempt.dayNumber,
+          skill: attempt.skill ?? previous.skill,
+        },
+        attempt.correct ? "correct" : "incorrect",
+        attempt.at,
+      )
+    : initialReviewState({
+        learnerId,
+        exerciseId: attempt.exerciseId,
+        dayNumber: attempt.dayNumber,
+        skill: attempt.skill,
+        reviewedAt: attempt.at,
+        correct: attempt.correct,
+      });
+
+  const { error: reviewWriteError } = await supabase
+    .from("learner_review_states")
+    .upsert(reviewStateToRow(nextState), {
+      onConflict: "learner_id,exercise_id",
+    });
+
+  if (reviewWriteError) {
     return { persisted: false, reason: "failed" };
   }
 
