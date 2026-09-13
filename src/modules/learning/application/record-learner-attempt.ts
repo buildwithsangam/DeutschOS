@@ -18,6 +18,7 @@ import {
   scheduleReview,
   type ReviewScheduleState,
 } from "@/modules/learning/domain/srs";
+import { projectAllErrorMemory } from "@/modules/learning/domain/error-memory";
 
 type RecordLearnerAttemptResult =
   | { persisted: true }
@@ -196,6 +197,30 @@ export async function recordLearnerAttempt(
     });
 
   if (reviewWriteError) {
+    return { persisted: false, reason: "failed" };
+  }
+
+  const errorMemory = projectAllErrorMemory(evidenceRows, new Date(attempt.at));
+  const { error: errorMemoryWriteError } = await supabase
+    .from("learner_error_memory")
+    .upsert(
+      errorMemory.map((memory) => ({
+        learner_id: memory.learnerId,
+        exercise_id: memory.exerciseId,
+        day_number: memory.dayNumber,
+        category: memory.category,
+        skill: memory.skill ?? null,
+        occurrences: memory.occurrences,
+        recent_occurrences: memory.recentOccurrences,
+        resolved_streak: memory.resolvedStreak,
+        last_occurred_at: memory.lastOccurredAt,
+        last_resolved_at: memory.lastResolvedAt,
+        influence: memory.influence,
+      })),
+      { onConflict: "learner_id,exercise_id" },
+    );
+
+  if (errorMemoryWriteError) {
     return { persisted: false, reason: "failed" };
   }
 
