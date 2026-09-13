@@ -47,6 +47,7 @@ import {
   deriveExercisesForDay,
   type A1Exercise,
 } from "@/modules/learning/domain/a1-exercises";
+import { recordLearnerAttempt } from "@/modules/learning/application/record-learner-attempt";
 
 type View = "today" | "day" | "map" | "review" | "vocabulary" | "exam" | "settings";
 
@@ -1494,6 +1495,11 @@ export function A1LearningMvp({
     };
 
     setProgress((current) => withAttempt(current, attempt));
+
+    void recordLearnerAttempt(attempt).catch(() => {
+      // Local evidence remains the immediate learner-facing fallback.
+      // Durable persistence failure must not block practice.
+    });
   };
 
   const handleResetProgress = () => {
