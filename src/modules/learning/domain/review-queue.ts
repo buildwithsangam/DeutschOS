@@ -1,5 +1,6 @@
 import type { LocalAttempt, LocalLearningProgress } from "@/modules/learning/domain/local-progress";
 import { attemptsForExercise, dayProgress } from "@/modules/learning/domain/local-progress";
+import { projectAllErrorMemory, type ErrorMemory } from "@/modules/learning/domain/error-memory";
 import {
   buildScheduledReviewQueue,
   initialReviewState,
@@ -42,58 +43,93 @@ function deriveLocalScheduleStates(progress: LocalLearningProgress): ReviewSched
   });
 }
 
+function errorCandidate(memory: ErrorMemory, progress: LocalLearningProgress): ReviewCandidate {
+  const attempts = attemptsForExercise(progress, memory.exerciseId);
+  const latest = latestAttempt(attempts);
+  return {
+    exerciseId: memory.exerciseId,
+    dayNumber: memory.dayNumber,
+    reason: memory.recentOccurrences > 0 ? "recent_failure" : "repeated_failure",
+    score: 300 + memory.influence,
+    failureCount: memory.occurrences,
+    lastAttemptAt: latest?.at ?? memory.lastOccurredAt,
+  };
+}
+
 /**
- * SRS-first local review queue. Persisted states can be supplied by the
- * authenticated application layer; otherwise schedule state is reconstructed
- * from the append-only local attempt history so the learner still gets SRS
- * behavior offline.
+ * Adaptive review queue: SRS due work remains the backbone, while persistent
+ * or locally reconstructed error memory can promote unresolved weaknesses.
+ * Recovered exercises decay through error-memory influence and recent-exposure
+ * suppression rather than being treated as permanently weak.
  */
-export function buildReviewQueue(progress: LocalLearningProgress, now = new Date(), scheduleStates: ReviewScheduleState[] = []): ReviewCandidate[] {
+export function buildReviewQueue(progress: LocalLearningProgress, now = new Date(), scheduleStates: ReviewScheduleState[] = [], errorMemory: ErrorMemory[] = []): ReviewCandidate[] {
   const effectiveStates = scheduleStates.length > 0 ? scheduleStates : deriveLocalScheduleStates(progress);
-  if (effectiveStates.length > 0) {
-    const scheduled = interleaveReviewQueue(buildScheduledReviewQueue(effectiveStates, now, 10));
-    return scheduled.map((candidate) => {
-      const attempts = attemptsForExercise(progress, candidate.exerciseId);
-      const failures = attempts.filter((attempt) => !attempt.correct);
-      const latest = latestAttempt(attempts);
-      return {
-        exerciseId: candidate.exerciseId,
-        dayNumber: candidate.dayNumber,
-        reason: candidate.overdueDays > 0 ? "overdue" : "due",
-        score: candidate.priority,
-        failureCount: Math.max(candidate.lapses, failures.length),
-        lastAttemptAt: latest?.at ?? candidate.lastReviewedAt ?? candidate.dueAt,
-        dueAt: candidate.dueAt,
-        overdueDays: candidate.overdueDays,
-      };
-    });
+  const effectiveErrors = errorMemory.length > 0 ? errorMemory : projectAllErrorMemory(progress.attempts.map((attempt) => ({
+    id: attempt.id,
+    learnerId: "local",
+    dayNumber: attempt.dayNumber,
+    exerciseId: attempt.exerciseId,
+    correct: attempt.correct,
+    result: attempt.result,
+    skill: attempt.skill,
+    response: attempt.response,
+    occurredAt: attempt.at,
+  })), now);
+
+  const scheduled = effectiveStates.length
+    ? interleaveReviewQueue(buildScheduledReviewQueue(effectiveStates, now, 20))
+    : [];
+  const scheduledByExercise = new Map(scheduled.map((item) => [item.exerciseId, item]));
+  const candidates: ReviewCandidate[] = scheduled.map((candidate) => {
+    const attempts = attemptsForExercise(progress, candidate.exerciseId);
+    const failures = attempts.filter((attempt) => !attempt.correct);
+    const latest = latestAttempt(attempts);
+    return {
+      exerciseId: candidate.exerciseId,
+      dayNumber: candidate.dayNumber,
+      reason: candidate.overdueDays > 0 ? "overdue" : "due",
+      score: candidate.priority,
+      failureCount: Math.max(candidate.lapses, failures.length),
+      lastAttemptAt: latest?.at ?? candidate.lastReviewedAt ?? candidate.dueAt,
+      dueAt: candidate.dueAt,
+      overdueDays: candidate.overdueDays,
+    };
+  });
+
+  for (const memory of effectiveErrors) {
+    if (scheduledByExercise.has(memory.exerciseId)) continue;
+    candidates.push(errorCandidate(memory, progress));
   }
 
-  const byExercise = new Map<string, LocalAttempt[]>();
-  for (const attempt of progress.attempts) {
-    const existing = byExercise.get(attempt.exerciseId) ?? [];
-    existing.push(attempt);
-    byExercise.set(attempt.exerciseId, existing);
+  if (!candidates.length) {
+    const byExercise = new Map<string, LocalAttempt[]>();
+    for (const attempt of progress.attempts) {
+      const existing = byExercise.get(attempt.exerciseId) ?? [];
+      existing.push(attempt);
+      byExercise.set(attempt.exerciseId, existing);
+    }
+    for (const [exerciseId, attempts] of byExercise) {
+      const latest = latestAttempt(attempts);
+      if (!latest) continue;
+      const failures = attempts.filter((attempt) => !attempt.correct);
+      const lastFailure = latestFailure(attempts);
+      const recentFailure = lastFailure !== undefined && now.getTime() - new Date(lastFailure.at).getTime() <= RECENT_FAILURE_WINDOW_MS;
+      const repeatedFailure = failures.length >= 2;
+      const flagged = dayProgress(progress, latest.dayNumber).needsReview;
+      const recentExposure = now.getTime() - new Date(latest.at).getTime() <= RECENT_FAILURE_WINDOW_MS;
+      if (!recentFailure && !repeatedFailure && !flagged && !recentExposure) continue;
+      let reason: ReviewReason; let score: number;
+      if (recentFailure) { reason = "recent_failure"; score = 400; }
+      else if (repeatedFailure) { reason = "repeated_failure"; score = 300; }
+      else if (flagged) { reason = "needs_review"; score = 200; }
+      else { reason = "recent_exposure"; score = 100; }
+      candidates.push({ exerciseId, dayNumber: latest.dayNumber, reason, score, failureCount: failures.length, lastAttemptAt: latest.at });
+    }
   }
-  const candidates: ReviewCandidate[] = [];
-  for (const [exerciseId, attempts] of byExercise) {
-    const latest = latestAttempt(attempts);
-    if (!latest) continue;
-    const failures = attempts.filter((attempt) => !attempt.correct);
-    const lastFailure = latestFailure(attempts);
-    const recentFailure = lastFailure !== undefined && now.getTime() - new Date(lastFailure.at).getTime() <= RECENT_FAILURE_WINDOW_MS;
-    const repeatedFailure = failures.length >= 2;
-    const flagged = dayProgress(progress, latest.dayNumber).needsReview;
-    const recentExposure = now.getTime() - new Date(latest.at).getTime() <= RECENT_FAILURE_WINDOW_MS;
-    if (!recentFailure && !repeatedFailure && !flagged && !recentExposure) continue;
-    let reason: ReviewReason; let score: number;
-    if (recentFailure) { reason = "recent_failure"; score = 400; }
-    else if (repeatedFailure) { reason = "repeated_failure"; score = 300; }
-    else if (flagged) { reason = "needs_review"; score = 200; }
-    else { reason = "recent_exposure"; score = 100; }
-    candidates.push({ exerciseId, dayNumber: latest.dayNumber, reason, score, failureCount: failures.length, lastAttemptAt: latest.at });
-  }
-  return candidates.sort((a, b) => b.score - a.score || b.failureCount - a.failureCount || b.lastAttemptAt.localeCompare(a.lastAttemptAt));
+
+  return candidates
+    .sort((a, b) => b.score - a.score || b.failureCount - a.failureCount || b.lastAttemptAt.localeCompare(a.lastAttemptAt))
+    .slice(0, 10);
 }
 
 export function reviewReasonLabel(reason: ReviewReason): string {
@@ -107,8 +143,8 @@ export function reviewReasonLabel(reason: ReviewReason): string {
   }
 }
 
-export function reviewExercises(progress: LocalLearningProgress, limit = 10, scheduleStates: ReviewScheduleState[] = []): ReviewExercise[] {
-  return buildReviewQueue(progress, new Date(), scheduleStates).slice(0, Math.max(0, limit)).map((candidate) => ({ exerciseId: candidate.exerciseId, dayNumber: candidate.dayNumber }));
+export function reviewExercises(progress: LocalLearningProgress, limit = 10, scheduleStates: ReviewScheduleState[] = [], errorMemory: ErrorMemory[] = []): ReviewExercise[] {
+  return buildReviewQueue(progress, new Date(), scheduleStates, errorMemory).slice(0, Math.max(0, limit)).map((candidate) => ({ exerciseId: candidate.exerciseId, dayNumber: candidate.dayNumber }));
 }
 
 export { attemptsForExercise };
