@@ -8,6 +8,10 @@ export async function proxy(request: NextRequest) {
     request: { headers: request.headers },
   });
 
+  if (process.env.DEUTSCHOS_E2E === "1") {
+    return response;
+  }
+
   const { url, publishableKey } = getSupabasePublicConfig();
 
   const supabase = createServerClient(url, publishableKey, {

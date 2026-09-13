@@ -6,4 +6,9 @@ export default defineConfig({
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000",
   },
+  webServer: {
+    command: "DEUTSCHOS_E2E=1 pnpm start",
+    url: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000",
+    reuseExistingServer: false,
+  },
 });

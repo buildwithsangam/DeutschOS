@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   if (code) {
     const { url, publishableKey } = getSupabasePublicConfig();
 
-    let response = NextResponse.redirect(`${origin}${next}`);
+    const response = NextResponse.redirect(`${origin}${next}`);
 
     const supabase = createServerClient(url, publishableKey, {
       cookies: {

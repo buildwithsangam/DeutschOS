@@ -134,9 +134,6 @@ function ActiveSentenceExercise({
   >("idle");
 
   const builtSentence = selected.join(" ").replace(/\s+([.,?!:;])/g, "$1");
-  const stages = sentenceBuilderStages({
-    sentenceBuilders: [exercise],
-  } as A1Day);
 
   const reset = () => {
     setAvailable([...exercise.tokens].reverse());
@@ -279,7 +276,10 @@ function SentenceBuilder({
     Record<string, boolean>
   >({});
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const allActiveComplete =
     activeExercises.length > 0 &&
@@ -721,7 +721,7 @@ function MatchPairsRenderer({
 }) {
   const leftOptions = exercise.data.pairs.map((pair) => pair.left);
   const rightOptions = useMemo(
-    () => exercise.data.pairs.map((pair) => pair.right).sort(() => Math.random() - 0.5),
+    () => exercise.data.pairs.map((pair) => pair.right).reverse(),
     [exercise.data.pairs],
   );
 
@@ -731,29 +731,23 @@ function MatchPairsRenderer({
   const [matchedRight, setMatchedRight] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<"idle" | "correct" | "incorrect">("idle");
 
-  const handleLeftClick = (left: string) => {
-    if (matchedLeft.has(left)) return;
-    setSelectedLeft(left);
-    setFeedback("idle");
-  };
-
-  const handleRightClick = (right: string) => {
-    if (matchedRight.has(right)) return;
-    setSelectedRight(right);
-    setFeedback("idle");
-  };
-
-  useEffect(() => {
-    if (!selectedLeft || !selectedRight) return;
-
+  const evaluatePair = (left: string, right: string) => {
     const pair = exercise.data.pairs.find(
-      (p) => p.left === selectedLeft && p.right === selectedRight,
+      (candidate) => candidate.left === left && candidate.right === right,
     );
     const correct = Boolean(pair);
 
     if (pair) {
-      setMatchedLeft((prev) => new Set(prev).add(selectedLeft));
-      setMatchedRight((prev) => new Set(prev).add(selectedRight));
+      setMatchedLeft((prev) => {
+        const next = new Set(prev);
+        next.add(left);
+        return next;
+      });
+      setMatchedRight((prev) => {
+        const next = new Set(prev);
+        next.add(right);
+        return next;
+      });
       setFeedback("correct");
     } else {
       setFeedback("incorrect");
@@ -763,14 +757,36 @@ function MatchPairsRenderer({
       exerciseId: exercise.id,
       correct,
       result: correct ? "correct" : "incorrect",
-      response: JSON.stringify({
-        left: selectedLeft,
-        right: selectedRight,
-      }),
+      response: JSON.stringify({ left, right }),
     });
+
     setSelectedLeft(null);
     setSelectedRight(null);
-  }, [selectedLeft, selectedRight, exercise.data.pairs]);
+  };
+
+  const handleLeftClick = (left: string) => {
+    if (matchedLeft.has(left)) return;
+    setFeedback("idle");
+
+    if (selectedRight) {
+      evaluatePair(left, selectedRight);
+      return;
+    }
+
+    setSelectedLeft(left);
+  };
+
+  const handleRightClick = (right: string) => {
+    if (matchedRight.has(right)) return;
+    setFeedback("idle");
+
+    if (selectedLeft) {
+      evaluatePair(selectedLeft, right);
+      return;
+    }
+
+    setSelectedRight(right);
+  };
 
   const complete =
     matchedLeft.size === exercise.data.pairs.length &&
@@ -1414,24 +1430,12 @@ export function A1LearningMvp({
     curriculum.days[0];
   const activeProgress = dayProgress(progress, activeDay.dayNumber);
   const activeNotebookNotes = notebookGuidance(activeDay);
-  const nextLearningDay =
-    curriculum.days.find((day) => {
-      const item = dayProgress(progress, day.dayNumber);
-      return (
-        isDayUnlocked(progress, day.dayNumber) &&
-        !(item.lessonCompleted && item.practiceCompleted)
-      );
-    }) ?? activeDay;
   const followingDay = curriculum.days.find(
     (day) => day.dayNumber === activeDay.dayNumber + 1,
   );
   const courseWeeks = [
     ...new Set(curriculum.days.map((day) => day.weekNumber)),
   ];
-  const completedDays = curriculum.days.filter((day) => {
-    const item = dayProgress(progress, day.dayNumber);
-    return item.lessonCompleted && item.practiceCompleted;
-  }).length;
   const reviewQueue = buildReviewQueue(progress).slice(0, 10);
   const progressSummary = buildProgressSummary(curriculum, progress);
 

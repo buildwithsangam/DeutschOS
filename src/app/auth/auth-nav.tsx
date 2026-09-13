@@ -6,6 +6,16 @@ import { createSupabaseServerClient } from "@/shared/infrastructure/supabase/ser
 import { SignOutButton } from "@/app/auth/signout-button";
 
 export async function AuthNav() {
+  if (process.env.DEUTSCHOS_E2E === "1") {
+    return (
+      <nav className="auth-nav">
+        <Link className="auth-link" href="/login">
+          Sign in
+        </Link>
+      </nav>
+    );
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
